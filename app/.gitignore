@@ -1,0 +1,6 @@
+# 千万不要提交这个文件：里面有你的访问令牌
+config.local.json
+
+# Python
+__pycache__/
+*.pyc

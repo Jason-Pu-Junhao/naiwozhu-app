@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>奶我助 · 待交作业查询</title>
+<style>
+  :root{
+    --navy:#1B3A6B; --navy-d:#122747; --navy-l:#E8EEF7;
+    --orange:#E8792A; --orange-l:#FFF6EE; --green:#2E7D5B; --green-l:#E6F2EC;
+    --red:#C0392B; --gray:#5A6472; --line:#D8DEE8; --bg:#F4F6FA;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#14181F;
+       font-family:"Noto Sans CJK SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 80px}
+  header{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+  h1{font-size:24px;color:var(--navy);margin:0}
+  .sub{color:var(--gray);font-size:13px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;
+        padding:18px 20px;margin-top:16px;box-shadow:0 1px 3px rgba(27,58,107,.05)}
+  .ask{display:flex;gap:10px}
+  .ask input{flex:1;font-size:16px;padding:12px 14px;border:1.5px solid var(--line);
+             border-radius:9px;outline:none;font-family:inherit}
+  .ask input:focus{border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-l)}
+  .ask button{font-size:15px;font-weight:600;padding:12px 22px;border:0;border-radius:9px;
+              background:var(--navy);color:#fff;cursor:pointer;font-family:inherit}
+  .ask button:hover{background:var(--navy-d)}
+  .ask button:disabled{opacity:.5;cursor:default}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{font-size:12.5px;padding:6px 12px;border-radius:20px;border:1px solid var(--line);
+        background:#fff;color:var(--gray);cursor:pointer}
+  .chip:hover{border-color:var(--orange);color:var(--orange)}
+  .note{margin-top:12px;font-size:13px;color:var(--gray);min-height:18px}
+  .note.warn{color:var(--orange)}
+  .list{margin-top:16px}
+  .item{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);
+        border-radius:10px;padding:14px 16px;margin-bottom:10px}
+  .item.overdue{border-left-color:var(--red);background:#FFF8F7}
+  .item.soon{border-left-color:var(--orange);background:var(--orange-l)}
+  .row1{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .title{font-size:16px;font-weight:600;line-height:1.35}
+  .badge{font-size:12.5px;font-weight:600;white-space:nowrap;padding:3px 9px;border-radius:20px}
+  .b-ok{background:var(--green-l);color:var(--green)}
+  .b-soon{background:#FDEBDC;color:var(--orange)}
+  .b-over{background:#FBE4E1;color:var(--red)}
+  .meta{margin-top:7px;font-size:12.5px;color:var(--gray);display:flex;
+        flex-wrap:wrap;gap:6px 14px}
+  .src{font-size:11.5px;color:#8A93A0}
+  .empty{text-align:center;padding:40px 20px;color:var(--gray)}
+  .empty b{display:block;font-size:17px;color:var(--navy);margin-bottom:8px}
+  .sect-title{font-size:14px;font-weight:700;color:var(--navy);
+              margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .sect-title::before{content:"";width:4px;height:15px;background:var(--orange);border-radius:2px}
+  .token-form{display:flex;gap:10px;margin-top:10px}
+  .token-form input{flex:1;padding:10px 12px;border:1.5px solid var(--line);
+                    border-radius:8px;font-family:inherit;font-size:14px}
+  .hint{font-size:12.5px;color:var(--gray);line-height:1.7;margin-top:8px}
+  .hint code{background:var(--navy-l);padding:1px 6px;border-radius:4px;font-size:12px}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
+        border-top-color:var(--navy);border-radius:50%;animation:sp .7s linear infinite;
+        vertical-align:-2px;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  footer{margin-top:30px;font-size:12px;color:#98A2B0;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>奶我助</h1>
+    <span class="sub">待交作业查询 · 本地网页版</span>
+  </header>
+
+  <!-- 令牌未配置时显示 -->
+  <div class="card" id="tokenCard" style="display:none">
+    <div class="sect-title">先配置访问令牌（只需一次）</div>
+    <div class="hint">
+      1. 登录 <code>oc.sjtu.edu.cn</code> → 左上角头像 → <b>设置</b><br>
+      2. 拉到页面最底部 <b>已批准的访问许可</b> → <b>+ 新建访问许可证</b><br>
+      3. 用途随便填（如 <code>ddl-check</code>）→ 生成 → <b>立刻复制</b>（关掉弹窗就看不到了）<br>
+      令牌只保存在你自己电脑上，不会上传到任何服务器。
+    </div>
+    <div class="token-form">
+      <input id="tokenInput" type="password" placeholder="粘贴访问令牌…">
+      <button id="tokenBtn">验证并保存</button>
+    </div>
+  </div>
+
+  <!-- 查询区 -->
+  <div class="card">
+    <div class="ask">
+      <input id="q" placeholder="问一句，比如：我还有哪些作业没交" autocomplete="off">
+      <button id="askBtn">查询</button>
+    </div>
+    <div class="chips">
+      <span class="chip">我还有哪些作业没交</span>
+      <span class="chip">明天有什么要交的</span>
+      <span class="chip">这周还有什么没交</span>
+      <span class="chip">高数有什么作业</span>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <footer>
+    只监听本机 127.0.0.1，令牌不出你的电脑 ·
+    <a href="#" id="redo" style="color:#98A2B0">重新配置令牌</a>
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const listEl = $('#list'), noteEl = $('#note');
+
+function badge(it){
+  if (it.overdue) return `<span class="badge b-over">已过期</span>`;
+  const t = it.remaining || '';
+  const urgent = /小时|分钟/.test(t);
+  return `<span class="badge ${urgent?'b-soon':'b-ok'}">${t}</span>`;
+}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function renderItems(items){
+  if(!items.length){
+    listEl.innerHTML = `<div class="empty"><b>没有找到待交作业</b>
+      可能确实都交了，或者试试放宽时间范围（比如问“这周还有什么没交”）</div>`;
+    return;
+  }
+  // 已过期的单独放一组
+  const overdue = items.filter(i=>i.overdue);
+  const upcoming = items.filter(i=>!i.overdue);
+  let html = '';
+  if(overdue.length){
+    html += `<div class="sect-title">已过期（${overdue.length}）</div>`;
+    html += overdue.map(card).join('');
+  }
+  if(upcoming.length){
+    html += `<div class="sect-title">待提交（${upcoming.length}）</div>`;
+    html += upcoming.map(card).join('');
+  }
+  listEl.innerHTML = html;
+}
+function card(it){
+  const cls = it.overdue ? 'overdue' : (/小时|分钟/.test(it.remaining||'') ? 'soon' : '');
+  const link = it.html_url ? `<a href="${esc(it.html_url)}" target="_blank" rel="noreferrer">打开</a>` : '';
+  return `<div class="item ${cls}">
+    <div class="row1">
+      <div class="title">${esc(it.title)}</div>
+      ${badge(it)}
+    </div>
+    <div class="meta">
+      <span>截止 ${esc(it.due_local)}</span>
+      <span>${esc(it.course)}</span>
+      ${link?`<span>${link}</span>`:''}
+      <span class="src">来源：${(it.sources||[]).map(esc).join('、')}</span>
+    </div>
+  </div>`;
+}
+
+async function ask(text){
+  const btn = $('#askBtn');
+  btn.disabled = true;
+  noteEl.className = 'note';
+  noteEl.innerHTML = `<span class="spin"></span>正在查询…`;
+  listEl.innerHTML = '';
+  try{
+    const r = await fetch('/api/query', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text})
+    });
+    const d = await r.json();
+    if(!r.ok){
+      if(d.need_token){ showToken(); }
+      noteEl.className='note warn';
+      noteEl.textContent = d.error || '查询失败';
+      return;
+    }
+    if(d.parsed && !d.parsed.is_query){
+      noteEl.className='note warn';
+      noteEl.innerHTML = `${esc(d.note||'这句我没当成查询')}<br>
+        <span style="font-size:12px">${esc(d.help||'').replace(/\n/g,'<br>')}</span>`;
+      listEl.innerHTML = `<div class="empty">这句我按陈述处理了，没有去查数据。<br>
+        如果确实想查，可以问“<b>明天有什么要交的</b>”</div>`;
+      return;
+    }
+    noteEl.textContent = d.count ? `共 ${d.count} 项` : '';
+    renderItems(d.items||[]);
+  }catch(e){
+    noteEl.className='note warn';
+    noteEl.textContent = '请求出错：' + e.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function showToken(){ $('#tokenCard').style.display='block'; }
+
+async function init(){
+  const s = await (await fetch('/api/status')).json();
+  if(!s.has_token) showToken();
+}
+$('#askBtn').onclick = () => { const t=$('#q').value.trim(); if(t) ask(t); };
+$('#q').addEventListener('keydown', e => { if(e.key==='Enter'){ const t=$('#q').value.trim(); if(t) ask(t);} });
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+  $('#q').value = c.textContent.trim(); ask(c.textContent.trim());
+});
+$('#tokenBtn').onclick = async () => {
+  const tok = $('#tokenInput').value.trim();
+  if(!tok) return;
+  const btn = $('#tokenBtn'); btn.disabled = true; btn.textContent='验证中…';
+  try{
+    const r = await fetch('/api/token', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:tok})});
+    const d = await r.json();
+    if(d.ok){
+      $('#tokenInput').value='';
+      $('#tokenCard').style.display='none';
+      noteEl.className='note';
+      noteEl.textContent = `令牌已保存（${d.name}）。开始提问吧。`;
+    }else{
+      alert('验证失败：' + d.error);
+    }
+  }catch(e){ alert('出错：'+e.message); }
+  finally{ btn.disabled=false; btn.textContent='验证并保存'; }
+};
+$('#redo').onclick = e => { e.preventDefault(); showToken(); };
+init();
+</script>
+</body>
+</html>
