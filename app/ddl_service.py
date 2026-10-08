@@ -4,48 +4,12 @@
 """
 from datetime import datetime, timezone, timedelta
 
-CST = timezone(timedelta(hours=8))   # 交大在东八区
+from model import (KIND_DEADLINE, SRC_CANVAS,
+                   parse_dt as _parse_dt, remaining as _remaining,
+                   make_deadline)
 
 # Canvas 的 submission 里，这些 workflow_state 表示"已交/已判"
 DONE_STATES = {"submitted", "graded", "pending_review", "complete"}
-
-
-def _parse_dt(s):
-    """把 Canvas 的 ISO8601 时间转成带时区的 datetime。"""
-    if not s:
-        return None
-    try:
-        # Canvas 返回形如 2026-10-10T15:59:59Z
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except Exception:
-        return None
-
-
-def _fmt(dt):
-    if dt is None:
-        return "未设截止时间"
-    local = dt.astimezone(CST)
-    return local.strftime("%m-%d %H:%M")
-
-
-def _remaining(dt):
-    """返回 (人类可读剩余时间, 是否已过期)"""
-    if dt is None:
-        return "—", False
-    delta = dt - datetime.now(timezone.utc)
-    secs = delta.total_seconds()
-    if secs < 0:
-        over = -secs
-        if over < 3600:
-            return f"已过期 {int(over//60)} 分钟", True
-        if over < 86400:
-            return f"已过期 {int(over//3600)} 小时", True
-        return f"已过期 {int(over//86400)} 天", True
-    if secs < 3600:
-        return f"还有 {int(secs//60)} 分钟", False
-    if secs < 86400:
-        return f"还有 {int(secs//3600)} 小时", False
-    return f"还有 {int(secs//86400)} 天", False
 
 
 def _is_done(assignment):
@@ -64,22 +28,17 @@ def _is_done(assignment):
 
 
 def _norm(rec):
-    """统一成内部结构。"""
-    due = rec["due_at"]
-    rem, overdue = _remaining(due)
-    return {
-        "id": rec["id"],
-        "title": rec["title"],
-        # 课程名由调用方用课程表补上（这里不知道课程名）
-        "course": "",
-        "course_id": rec["course_id"],
-        "due_at": due.isoformat() if due else None,
-        "due_local": _fmt(due),
-        "remaining": rem,
-        "overdue": overdue,
-        "html_url": rec.get("html_url") or "",
-        "sources": sorted(rec["sources"]),
-    }
+    """统一成内部结构。
+
+    来源是 Canvas，所以类型固定记作 deadline——这一步不猜。
+    """
+    return make_deadline(
+        rec["id"], rec["title"], rec["due_at"], SRC_CANVAS,
+        course="",                       # 课程名由调用方用课程表补上
+        html_url=rec.get("html_url") or "",
+        sources=rec["sources"],
+        extra={"course_id": rec["course_id"]},
+    )
 
 
 class DDLService:

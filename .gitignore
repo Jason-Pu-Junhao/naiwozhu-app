@@ -1,6 +1,9 @@
 # 令牌与本地配置（重要）
 app/config.local.json
 
+# 本地数据：导入的日历快照、手动录入、收件箱
+app/data/
+
 # 依赖与缓存
 .venv/
 __pycache__/
@@ -11,6 +14,10 @@ out/preview/
 out/.lo/
 out/.mpl/
 out/server.log
+
+# Office 打开文件时留下的锁文件
+out/.~*
+.~*
 
 # 参考材料（体积大，不必入库）
 refs/*.docx

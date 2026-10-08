@@ -1,0 +1,73 @@
+{
+  "tool": "奶我助 · 交我办日历导出",
+  "version": 1,
+  "exported_at": "2026-10-08T14:23:11+08:00",
+  "source": "https://calendar.sjtu.edu.cn/ui/calendar",
+  "range": {
+    "start": "2026-10-01",
+    "end": "2027-01-06"
+  },
+  "calendars": {
+    "my": [
+      {
+        "id": 11,
+        "name": "我的日程"
+      },
+      {
+        "id": 12,
+        "name": "2026秋 课程表"
+      }
+    ],
+    "share": [
+      {
+        "id": 21,
+        "name": "班级活动"
+      }
+    ]
+  },
+  "events": [
+    {
+      "eventId": 1001,
+      "calendarId": 11,
+      "title": "小组会议",
+      "startTime": "2026-10-09 14:00",
+      "endTime": "2026-10-09 15:30",
+      "location": "闵行校区",
+      "description": "讨论分工",
+      "allDay": false
+    },
+    {
+      "eventId": 1002,
+      "calendarId": 12,
+      "title": "高等数学",
+      "startTime": "2026-10-09 08:00:00",
+      "endTime": "2026-10-09 09:40:00",
+      "location": "上院100",
+      "allDay": false
+    },
+    {
+      "eventId": 1003,
+      "calendarId": 21,
+      "title": "班级团建",
+      "start_time": "2026-10-11",
+      "end_time": "2026-10-11",
+      "all_day": true
+    },
+    {
+      "eventId": 1004,
+      "calendarId": 11,
+      "title": "没有时间的记录"
+    }
+  ],
+  "keys_seen": [
+    "allDay",
+    "calendarId",
+    "description",
+    "endTime",
+    "eventId",
+    "location",
+    "startTime",
+    "title"
+  ],
+  "_说明": "这是伪造的示例数据，用来在没联网、没登录的情况下验证导入链路；字段名和结构参照交我办接口的真实返回。"
+}

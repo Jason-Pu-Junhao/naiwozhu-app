@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>奶我助 · 待交作业查询</title>
+<title>奶我助 · 待办与日程</title>
 <style>
   :root{
     --navy:#1B3A6B; --navy-d:#122747; --navy-l:#E8EEF7;
     --orange:#E8792A; --orange-l:#FFF6EE; --green:#2E7D5B; --green-l:#E6F2EC;
+    --purple:#6B4EA8; --purple-l:#F1ECFA;
     --red:#C0392B; --gray:#5A6472; --line:#D8DEE8; --bg:#F4F6FA;
   }
   *{box-sizing:border-box}
@@ -23,66 +24,154 @@
   .ask input{flex:1;font-size:16px;padding:12px 14px;border:1.5px solid var(--line);
              border-radius:9px;outline:none;font-family:inherit}
   .ask input:focus{border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-l)}
+  button{font-family:inherit;cursor:pointer}
   .ask button{font-size:15px;font-weight:600;padding:12px 22px;border:0;border-radius:9px;
-              background:var(--navy);color:#fff;cursor:pointer;font-family:inherit}
+              background:var(--navy);color:#fff}
   .ask button:hover{background:var(--navy-d)}
   .ask button:disabled{opacity:.5;cursor:default}
   .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
   .chip{font-size:12.5px;padding:6px 12px;border-radius:20px;border:1px solid var(--line);
-        background:#fff;color:var(--gray);cursor:pointer}
+        background:#fff;color:var(--gray)}
   .chip:hover{border-color:var(--orange);color:var(--orange)}
   .note{margin-top:12px;font-size:13px;color:var(--gray);min-height:18px}
   .note.warn{color:var(--orange)}
   .list{margin-top:16px}
+
   .item{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);
         border-radius:10px;padding:14px 16px;margin-bottom:10px}
   .item.overdue{border-left-color:var(--red);background:#FFF8F7}
   .item.soon{border-left-color:var(--orange);background:var(--orange-l)}
+  .item.sched{border-left-color:var(--purple)}
+  .item.sched.overdue{border-left-color:var(--red)}
   .row1{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
   .title{font-size:16px;font-weight:600;line-height:1.35}
   .badge{font-size:12.5px;font-weight:600;white-space:nowrap;padding:3px 9px;border-radius:20px}
   .b-ok{background:var(--green-l);color:var(--green)}
   .b-soon{background:#FDEBDC;color:var(--orange)}
   .b-over{background:#FBE4E1;color:var(--red)}
+  .kbadge{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:5px;
+          white-space:nowrap;margin-right:8px;vertical-align:1px}
+  .k-dl{background:var(--navy-l);color:var(--navy)}
+  .k-sc{background:var(--purple-l);color:var(--purple)}
   .meta{margin-top:7px;font-size:12.5px;color:var(--gray);display:flex;
         flex-wrap:wrap;gap:6px 14px}
   .src{font-size:11.5px;color:#8A93A0}
   .empty{text-align:center;padding:40px 20px;color:var(--gray)}
   .empty b{display:block;font-size:17px;color:var(--navy);margin-bottom:8px}
   .sect-title{font-size:14px;font-weight:700;color:var(--navy);
-              margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+              margin:0 0 12px;display:flex;align-items:center;gap:8px}
   .sect-title::before{content:"";width:4px;height:15px;background:var(--orange);border-radius:2px}
-  .token-form{display:flex;gap:10px;margin-top:10px}
-  .token-form input{flex:1;padding:10px 12px;border:1.5px solid var(--line);
-                    border-radius:8px;font-family:inherit;font-size:14px}
-  .hint{font-size:12.5px;color:var(--gray);line-height:1.7;margin-top:8px}
+  .card + .card .sect-title{margin-top:0}
+  .hint{font-size:12.5px;color:var(--gray);line-height:1.75;margin-top:8px}
   .hint code{background:var(--navy-l);padding:1px 6px;border-radius:4px;font-size:12px}
+  .hint b{color:#14181F}
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
         border-top-color:var(--navy);border-radius:50%;animation:sp .7s linear infinite;
         vertical-align:-2px;margin-right:6px}
   @keyframes sp{to{transform:rotate(360deg)}}
+
+  .drop{margin-top:12px;border:1.5px dashed var(--line);border-radius:10px;
+        padding:16px;text-align:center;font-size:13px;color:var(--gray);
+        background:#FBFCFE;transition:.15s}
+  .drop.hot{border-color:var(--orange);background:var(--orange-l);color:var(--orange)}
+  .minibtn{font-size:12.5px;padding:6px 12px;border-radius:7px;border:1px solid var(--line);
+           background:#fff;color:var(--navy);font-weight:600}
+  .minibtn:hover{border-color:var(--navy);background:var(--navy-l)}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{border:0;background:#fff;padding:9px 18px;font-size:13.5px;font-weight:600;
+              color:var(--gray)}
+  .seg button + button{border-left:1.5px solid var(--line)}
+  .seg button.on{background:var(--navy);color:#fff}
+  .seg button.on[data-kind="日程"]{background:var(--purple)}
+  .mrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .mrow input{flex:1;min-width:150px;padding:10px 12px;border:1.5px solid var(--line);
+              border-radius:8px;font-family:inherit;font-size:14px;outline:none}
+  .mrow input:focus{border-color:var(--navy)}
+  .mrow button{padding:10px 20px;border:0;border-radius:8px;background:var(--navy);
+               color:#fff;font-weight:600;font-size:14px}
+  .codebox{margin-top:10px;width:100%;height:150px;font-family:ui-monospace,monospace;
+           font-size:11.5px;border:1.5px solid var(--line);border-radius:8px;padding:10px;
+           display:none;resize:vertical}
+  details{margin-top:10px;font-size:12.5px;color:var(--gray)}
+  details summary{cursor:pointer;color:var(--navy);font-weight:600}
+  details ol{margin:8px 0 0;padding-left:20px;line-height:1.9}
   footer{margin-top:30px;font-size:12px;color:#98A2B0;text-align:center}
+  footer a{color:#98A2B0}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>奶我助</h1>
-    <span class="sub">待交作业查询 · 本地网页版</span>
+    <span class="sub">待交作业 + 日程 · 本地网页版</span>
   </header>
 
   <!-- 令牌未配置时显示 -->
   <div class="card" id="tokenCard" style="display:none">
-    <div class="sect-title">先配置访问令牌（只需一次）</div>
+    <div class="sect-title">配置 Canvas 访问令牌（只需要一次）</div>
     <div class="hint">
       1. 登录 <code>oc.sjtu.edu.cn</code> → 左上角头像 → <b>设置</b><br>
       2. 拉到页面最底部 <b>已批准的访问许可</b> → <b>+ 新建访问许可证</b><br>
-      3. 用途随便填（如 <code>ddl-check</code>）→ 生成 → <b>立刻复制</b>（关掉弹窗就看不到了）<br>
-      令牌只保存在你自己电脑上，不会上传到任何服务器。
+      3. 用途随便填（如 <code>naiwozhu</code>）→ 生成 → <b>立刻复制</b>（关掉弹窗就看不到了）<br>
+      令牌只保存在你自己电脑上，不会上传到任何服务器。这一项只影响作业（截止），
+      不配也能用日程。
     </div>
-    <div class="token-form">
+    <div class="mrow">
       <input id="tokenInput" type="password" placeholder="粘贴访问令牌…">
       <button id="tokenBtn">验证并保存</button>
+    </div>
+  </div>
+
+  <!-- 交我办日历导入 -->
+  <div class="card">
+    <div class="sect-title">交我办日程</div>
+    <div class="hint" id="calStatus">正在读取状态…</div>
+
+    <div class="drop" id="drop">
+      把导出脚本生成的 <b>JSON</b> 拖到这里，或
+      <button class="minibtn" id="pickBtn" style="margin-left:4px">选择文件</button>
+      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+      <div style="margin-top:8px;font-size:12px" id="dropName"></div>
+    </div>
+
+    <div class="btnrow">
+      <button class="minibtn" id="copyScript">复制导出脚本</button>
+      <button class="minibtn" id="scanBtn">从收件箱导入</button>
+    </div>
+    <textarea class="codebox" id="codeBox" readonly></textarea>
+
+    <details>
+      <summary>怎么拿到这个 JSON 文件？（三步）</summary>
+      <ol>
+        <li>浏览器登录 <code>calendar.sjtu.edu.cn/ui/calendar</code></li>
+        <li>在这张页面上按 <b>F12</b> → <b>Console</b>，粘贴刚复制的脚本，回车</li>
+        <li>会下载一个 <code>sjtu-calendar-&lt;时间戳&gt;.json</code>，拖到上面的虚线框里</li>
+      </ol>
+      <div style="margin-top:6px">
+        脚本在<b>你自己的页面里</b>运行，借你已经登录的会话读数据。
+        它不登录、不读 cookie、不保存密码，也不把数据发给任何第三方。<br>
+        也可以把下载好的文件放进收件箱目录，再点「从收件箱导入」：
+        <code id="inboxPath">…</code>
+      </div>
+    </details>
+  </div>
+
+  <!-- 手动录入 -->
+  <div class="card">
+    <div class="sect-title">手动添加</div>
+    <div class="seg" id="kindSeg">
+      <button data-kind="deadline" class="on">截止 deadline</button>
+      <button data-kind="日程">日程</button>
+    </div>
+    <div class="mrow">
+      <input id="mTitle" placeholder="标题，比如「高数第三章作业」" autocomplete="off">
+      <input id="mWhen" type="datetime-local">
+      <input id="mEnd" type="datetime-local" style="display:none">
+      <button id="mAdd">添加</button>
+    </div>
+    <div class="hint" id="mHint">
+      自行录入的条目必须自己说明是哪种：<b>截止</b>只有一个时间点，<b>日程</b>有起止时间。
     </div>
   </div>
 
@@ -96,7 +185,8 @@
       <span class="chip">我还有哪些作业没交</span>
       <span class="chip">明天有什么要交的</span>
       <span class="chip">这周还有什么没交</span>
-      <span class="chip">高数有什么作业</span>
+      <span class="chip">我明天有什么日程</span>
+      <span class="chip">这周有什么安排</span>
     </div>
     <div class="note" id="note"></div>
   </div>
@@ -105,59 +195,80 @@
 
   <footer>
     只监听本机 127.0.0.1，令牌不出你的电脑 ·
-    <a href="#" id="redo" style="color:#98A2B0">重新配置令牌</a>
+    <a href="#" id="redo">重新配置令牌</a>
   </footer>
 </div>
 
 <script>
 const $ = s => document.querySelector(s);
 const listEl = $('#list'), noteEl = $('#note');
+let manualKind = 'deadline';
 
-function badge(it){
-  if (it.overdue) return `<span class="badge b-over">已过期</span>`;
-  const t = it.remaining || '';
-  const urgent = /小时|分钟/.test(t);
-  return `<span class="badge ${urgent?'b-soon':'b-ok'}">${t}</span>`;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------------------------------------------------------- 渲染条目 */
+function kindBadge(it){
+  return it.kind === 'deadline'
+    ? `<span class="kbadge k-dl">截止</span>`
+    : `<span class="kbadge k-sc">日程</span>`;
 }
-function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-
-function renderItems(items){
-  if(!items.length){
-    listEl.innerHTML = `<div class="empty"><b>没有找到待交作业</b>
-      可能确实都交了，或者试试放宽时间范围（比如问“这周还有什么没交”）</div>`;
-    return;
-  }
-  // 已过期的单独放一组
-  const overdue = items.filter(i=>i.overdue);
-  const upcoming = items.filter(i=>!i.overdue);
-  let html = '';
-  if(overdue.length){
-    html += `<div class="sect-title">已过期（${overdue.length}）</div>`;
-    html += overdue.map(card).join('');
-  }
-  if(upcoming.length){
-    html += `<div class="sect-title">待提交（${upcoming.length}）</div>`;
-    html += upcoming.map(card).join('');
-  }
-  listEl.innerHTML = html;
+function badge(it){
+  if (it.overdue) return `<span class="badge b-over">${it.kind==='deadline'?'已过期':'已结束'}</span>`;
+  const t = it.remaining || '—';
+  const hot = /小时|分钟|进行中/.test(t);
+  return `<span class="badge ${hot?'b-soon':'b-ok'}">${esc(t)}</span>`;
+}
+function itemClass(it){
+  const c = [];
+  if (it.kind === '日程') c.push('sched');
+  if (it.overdue) c.push('overdue');
+  else if (/小时|分钟/.test(it.remaining||'')) c.push('soon');
+  return c.join(' ');
 }
 function card(it){
-  const cls = it.overdue ? 'overdue' : (/小时|分钟/.test(it.remaining||'') ? 'soon' : '');
-  const link = it.html_url ? `<a href="${esc(it.html_url)}" target="_blank" rel="noreferrer">打开</a>` : '';
-  return `<div class="item ${cls}">
+  const isDl = it.kind === 'deadline';
+  const link = it.html_url
+    ? `<span><a href="${esc(it.html_url)}" target="_blank" rel="noreferrer">打开</a></span>` : '';
+  const lines = isDl
+    ? `<span>截止 ${esc(it.due_local)}</span>
+       ${it.course?`<span>${esc(it.course)}</span>`:''}`
+    : `<span>${esc(it.when_local)}</span>
+       ${it.location?`<span>📍 ${esc(it.location)}</span>`:''}
+       ${it.calendar?`<span>${esc(it.calendar)}</span>`:''}`;
+  const del = String(it.id||'').startsWith('manual-')
+    ? `<span><a href="#" data-del="${esc(it.id)}" style="color:#98A2B0">删除</a></span>` : '';
+  return `<div class="item ${itemClass(it)}">
     <div class="row1">
-      <div class="title">${esc(it.title)}</div>
+      <div class="title">${kindBadge(it)}${esc(it.title)}</div>
       ${badge(it)}
     </div>
     <div class="meta">
-      <span>截止 ${esc(it.due_local)}</span>
-      <span>${esc(it.course)}</span>
-      ${link?`<span>${link}</span>`:''}
-      <span class="src">来源：${(it.sources||[]).map(esc).join('、')}</span>
+      ${lines}${link}${del}
+      <span class="src">来源：${esc(it.source||'')}</span>
     </div>
   </div>`;
 }
+function renderItems(items){
+  if(!items.length){
+    listEl.innerHTML = `<div class="empty"><b>没有找到符合条件的条目</b>
+      可以试试放宽时间范围（比如问“这周有什么安排”）</div>`;
+    return;
+  }
+  listEl.innerHTML = items.map(card).join('');
+}
+listEl.addEventListener('click', async e => {
+  const a = e.target.closest('a[data-del]');
+  if(!a) return;
+  e.preventDefault();
+  if(!confirm('删掉这条手动录入的记录？')) return;
+  const r = await fetch('/api/manual/' + encodeURIComponent(a.dataset.del), {method:'DELETE'});
+  const d = await r.json();
+  if(!d.ok) alert(d.error || '删除失败');
+  ask($('#q').value.trim() || '这周有什么安排');
+});
 
+/* ---------------------------------------------------------- 查询 */
 async function ask(text){
   const btn = $('#askBtn');
   btn.disabled = true;
@@ -171,7 +282,6 @@ async function ask(text){
     });
     const d = await r.json();
     if(!r.ok){
-      if(d.need_token){ showToken(); }
       noteEl.className='note warn';
       noteEl.textContent = d.error || '查询失败';
       return;
@@ -184,7 +294,15 @@ async function ask(text){
         如果确实想查，可以问“<b>明天有什么要交的</b>”</div>`;
       return;
     }
-    noteEl.textContent = d.count ? `共 ${d.count} 项` : '';
+    const bits = [];
+    if (d.count) {
+      const dl = (d.items||[]).filter(i=>i.kind==='deadline').length;
+      const sc = (d.items||[]).length - dl;
+      bits.push(`共 ${d.count} 项` + (dl&&sc ? `（截止 ${dl} · 日程 ${sc}）` : ''));
+    }
+    if (d.warning) bits.push(`⚠ ${d.warning}`);
+    noteEl.className = d.warning ? 'note warn' : 'note';
+    noteEl.textContent = bits.join('　');
     renderItems(d.items||[]);
   }catch(e){
     noteEl.className='note warn';
@@ -194,12 +312,153 @@ async function ask(text){
   }
 }
 
-function showToken(){ $('#tokenCard').style.display='block'; }
-
-async function init(){
+/* ---------------------------------------------------------- 状态 */
+async function loadStatus(){
   const s = await (await fetch('/api/status')).json();
-  if(!s.has_token) showToken();
+  if(!s.has_token) $('#tokenCard').style.display='block';
+  $('#inboxPath').textContent = s.inbox || '—';
+
+  const c = s.calendar || {};
+  const el = $('#calStatus');
+  if (c.count) {
+    el.innerHTML = `已导入 <b>${c.count}</b> 条日程，数据时间 ` +
+      `<b>${esc(fmtTs(c.exported_at))}</b>` +
+      (c.filename ? `（${esc(c.filename)}）` : '') +
+      `，导入于 ${esc(fmtTs(c.imported_at))}。`;
+  } else {
+    el.innerHTML = `还没有导入交我办日程。下面是三步说明；` +
+      `也可以把文件放进收件箱后点「从收件箱导入」。`;
+  }
+  if (s.manual_count) {
+    el.innerHTML += `<br>另有手动录入 ${s.manual_count} 条。`;
+  }
+  return s;
 }
+function fmtTs(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} `
+       + `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/* ---------------------------------------------------------- 导入 */
+async function importPayload(payload, filename){
+  noteEl.className='note';
+  noteEl.innerHTML = `<span class="spin"></span>正在导入…`;
+  const r = await fetch('/api/import', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({payload, filename})
+  });
+  const d = await r.json();
+  if(!d.ok){
+    noteEl.className='note warn';
+    noteEl.textContent = '导入失败：' + (d.error||'未知错误');
+    return;
+  }
+  await loadStatus();
+  const skipped = ((d.stats||{}).skipped||[]).length;
+  noteEl.className = 'note';
+  noteEl.textContent = (d.stale ? '⏭ ' : '✅ ') + (d.message || '导入完成')
+    + (skipped ? `；有 ${skipped} 条没有时间字段，已跳过` : '');
+}
+async function readAndImport(file){
+  $('#dropName').textContent = file.name;
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    await importPayload(payload, file.name);
+  }catch(e){
+    noteEl.className='note warn';
+    noteEl.textContent = '这个文件读不出来：' + e.message;
+  }
+}
+const drop = $('#drop');
+$('#pickBtn').onclick = () => $('#fileInput').click();
+drop.onclick = e => { if(e.target === drop) $('#fileInput').click(); };
+$('#fileInput').onchange = e => { if(e.target.files[0]) readAndImport(e.target.files[0]); };
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.add('hot');
+}));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.remove('hot');
+}));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if(f) readAndImport(f);
+});
+$('#scanBtn').onclick = async () => {
+  noteEl.className='note';
+  noteEl.innerHTML = `<span class="spin"></span>正在扫描收件箱…`;
+  const r = await fetch('/api/import', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({scan:true})});
+  const d = await r.json();
+  await loadStatus();
+  noteEl.className = d.ok ? 'note' : 'note warn';
+  noteEl.textContent = d.ok ? `✅ ${d.message}` : (d.error || '导入失败');
+};
+$('#copyScript').onclick = async () => {
+  const box = $('#codeBox');
+  try{
+    const r = await fetch('/api/export-script');
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error || '取不到脚本');
+    await navigator.clipboard.writeText(d.code);
+    noteEl.className = 'note';
+    noteEl.textContent = '✅ 导出脚本已复制。去 calendar.sjtu.edu.cn/ui/calendar '
+                       + '按 F12 打开 Console 粘贴运行。';
+    box.style.display = 'none';
+  }catch(e){
+    // 剪贴板不给用就把代码摊开，手动 Ctrl+C
+    box.style.display = 'block';
+    try{
+      const d = await (await fetch('/api/export-script')).json();
+      box.value = d.code || '';
+      box.select();
+      noteEl.className = 'note warn';
+      noteEl.textContent = '自动复制不可用，代码已展开并选中，请按 Ctrl+C 复制。';
+    }catch(e2){
+      noteEl.className = 'note warn';
+      noteEl.textContent = '取不到导出脚本：' + e.message;
+    }
+  }
+};
+
+/* ---------------------------------------------------------- 手动录入 */
+$('#kindSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-kind]');
+  if(!b) return;
+  manualKind = b.dataset.kind;
+  [...$('#kindSeg').children].forEach(x => x.classList.toggle('on', x === b));
+  const isDl = manualKind === 'deadline';
+  $('#mEnd').style.display = isDl ? 'none' : '';
+  $('#mHint').innerHTML = isDl
+    ? '记作 <b>截止（deadline）</b>：只有一个时间点，就是「什么时候之前要交完」。'
+    : '记作 <b>日程</b>：有起止时间，出席即可。结束时间可以留空。';
+});
+$('#mAdd').onclick = async () => {
+  const title = $('#mTitle').value.trim();
+  if(!title){ alert('先写个标题'); return; }
+  const when = $('#mWhen').value;
+  if(!when){ alert('选一个时间'); return; }
+  const body = {kind: manualKind, title: title};
+  if(manualKind === 'deadline') body.due = when;
+  else { body.start = when; body.end = $('#mEnd').value || null; }
+  const r = await fetch('/api/manual', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await r.json();
+  if(!d.ok){ alert(d.error || '添加失败'); return; }
+  $('#mTitle').value = ''; $('#mWhen').value = ''; $('#mEnd').value = '';
+  await loadStatus();
+  const kindName = manualKind === 'deadline' ? '截止' : '日程';
+  noteEl.className = 'note';
+  noteEl.textContent = `✅ 已记作「${kindName}」：${title}`;
+  ask('这周有什么安排');
+};
+
+/* ---------------------------------------------------------- 其它 */
+function showToken(){ $('#tokenCard').style.display='block'; }
 $('#askBtn').onclick = () => { const t=$('#q').value.trim(); if(t) ask(t); };
 $('#q').addEventListener('keydown', e => { if(e.key==='Enter'){ const t=$('#q').value.trim(); if(t) ask(t);} });
 document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
@@ -225,7 +484,13 @@ $('#tokenBtn').onclick = async () => {
   finally{ btn.disabled=false; btn.textContent='验证并保存'; }
 };
 $('#redo').onclick = e => { e.preventDefault(); showToken(); };
-init();
+
+/* ---------------------------------------------------------- 启动 */
+(async () => {
+  await loadStatus();
+  $('#q').value = '这周有什么安排';
+  ask('这周有什么安排');
+})();
 </script>
 </body>
 </html>

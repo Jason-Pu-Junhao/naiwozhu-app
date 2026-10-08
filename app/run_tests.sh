@@ -7,3 +7,6 @@ echo "=========== 查询解析用例 ==========="
 echo
 echo "=========== 取数/翻页/去重验证 ==========="
 .venv/bin/python app/test_ddl.py
+echo
+echo "=========== 交我办导入 + 两种日期类型 ==========="
+.venv/bin/python app/test_store.py

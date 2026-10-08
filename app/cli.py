@@ -68,6 +68,69 @@ def render(items, parsed):
     print()
 
 
+def whoami(client):
+    """打印身份。
+
+    注意：/api/v1/users/self 返回的 login_id 是 null，
+    学号只有 /api/v1/users/self/profile 里才有。
+    """
+    me = client.me()
+    sid = ""
+    try:
+        sid = (client.profile() or {}).get("login_id") or ""
+    except CanvasError:
+        pass
+    if not sid:
+        sid = me.get("login_id") or "接口没返回学号"
+    print(f"令牌有效：{me.get('name')}（学号 {sid}）")
+
+
+def calendar_cmds(args):
+    """导入/查看交我办日程。这一步不需要 Canvas 令牌。"""
+    import json
+    import calendar_import
+    from store import Store
+
+    st = Store()
+
+    if args.show_calendar:
+        meta, items = st.calendar_meta(), st.calendar_items()
+        if not items:
+            print("还没有导入交我办日程。用 --import-calendar <文件> 导入。")
+            return 0
+        print(f"已导入 {len(items)} 条日程 · 数据时间 {meta['exported_at']} "
+              f"· 导入于 {meta['imported_at']}")
+        for it in items:
+            extra = f"  {C_DIM}{it.get('calendar') or ''}{C_END}"
+            print(f"  {it['when_local']:<24}{it['title']}{extra}")
+        return 0
+
+    if args.scan_inbox:
+        res = st.scan_inbox()
+        print(res.get("message") or res.get("error"))
+        return 0 if res.get("ok") else 2
+
+    path = args.import_calendar or args.inspect_calendar
+    if not os.path.exists(path):
+        print(f"找不到文件：{path}", file=sys.stderr)
+        return 2
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+
+    if args.inspect_calendar:
+        info = calendar_import.inspect(raw)
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+        return 0 if info.get("ok") else 2
+
+    res = st.import_payload(raw, filename=os.path.basename(path),
+                            fallback_mtime=os.path.getmtime(path))
+    print(res.get("message") or res.get("error"))
+    skipped = (res.get("stats") or {}).get("skipped") or []
+    if skipped and not res.get("stale"):
+        print(f"（跳过 {len(skipped)} 条没有时间字段的记录）")
+    return 0 if res.get("ok") else 2
+
+
 def main():
     ap = argparse.ArgumentParser(description="奶我助 · 待交作业查询（第一步·命令行版）")
     ap.add_argument("text", nargs="*", help="自然语言提问，例如：明天有什么要交的")
@@ -78,15 +141,26 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="打印翻页过程")
     ap.add_argument("--save-token", action="store_true", help="保存令牌到本地配置")
     ap.add_argument("--whoami", action="store_true", help="只验证令牌，打印身份")
+    ap.add_argument("--import-calendar", metavar="FILE",
+                    help="导入交我办导出脚本生成的 JSON")
+    ap.add_argument("--inspect-calendar", metavar="FILE",
+                    help="只看这个文件里有什么，不写入")
+    ap.add_argument("--scan-inbox", action="store_true",
+                    help="从收件箱目录导入最新的一份")
+    ap.add_argument("--show-calendar", action="store_true", help="列出已导入的日程")
     args = ap.parse_args()
+
+    # 日历这几条命令不碰 Canvas，所以放在要令牌之前
+    if (args.import_calendar or args.inspect_calendar
+            or args.scan_inbox or args.show_calendar):
+        return calendar_cmds(args)
 
     cfg = ask_token(args)
 
     try:
         client = CanvasClient(cfg["base"], cfg["token"], verbose=args.verbose)
         if args.whoami:
-            me = client.me()
-            print(f"令牌有效：{me.get('name')}（{me.get('login_id')}）")
+            whoami(client)
             return 0
 
         text = " ".join(args.text).strip()

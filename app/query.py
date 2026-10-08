@@ -36,8 +36,27 @@ NEGATION_PATTERNS = [
 # ---- 查询意图关键词（必须先出现这些才认为是查询）----
 QUERY_WORDS = [
     "作业", "任务", "deadline", "ddl", "截止", "要交", "没交", "未交",
-    "还没交", "哪些", "多少", "哪几", "什么",
+    "还没交", "哪些", "多少", "哪几", "什么", "日程", "安排", "会议",
+    "活动", "讲座", "考试",
 ]
+
+# ---- 类型意图：问的是「截止」还是「日程」 ----
+#
+# 两类都出现、或都没出现时返回 None，表示"两种都列出来"。
+DEADLINE_WORDS = ["作业", "deadline", "ddl", "截止", "要交", "没交", "未交",
+                  "提交"]
+SCHEDULE_WORDS = ["日程", "会议", "活动", "讲座", "课", "考试", "报名"]
+
+
+def detect_kind(low):
+    """返回 'deadline' / '日程' / None（两种都看）。"""
+    has_d = any(w in low for w in DEADLINE_WORDS)
+    has_s = any(w in low for w in SCHEDULE_WORDS)
+    if has_d and not has_s:
+        return "deadline"
+    if has_s and not has_d:
+        return "日程"
+    return None
 
 # 常见课程简称。可按自己的课表改。
 COURSE_ALIASES = {
@@ -62,17 +81,20 @@ def extract_course(low):
 def parse(text):
     """把一句话解析成查询条件。
 
-    返回 {'is_query', 'negated', 'days', 'course_kw', 'reason'}
+    返回 {'is_query', 'negated', 'days', 'course_kw', 'want_kind', 'reason'}
+
+    want_kind 为 'deadline' / '日程' / None（两种都列出来）。
     """
     t = (text or "").strip()
     if not t:
         return {"is_query": False, "negated": False, "days": None,
-                "course_kw": None, "reason": "空输入"}
+                "course_kw": None, "want_kind": None, "reason": "空输入"}
 
     low = t.lower().replace(" ", "")
 
     negated = any(re.search(p, low) for p in NEGATION_PATTERNS)
     has_query_word = any(w in low for w in QUERY_WORDS)
+    want_kind = detect_kind(low)
 
     days = None
     matched_time = None
@@ -88,27 +110,32 @@ def parse(text):
     # 陈述句：不查数据
     if negated:
         return {"is_query": False, "negated": True, "days": days,
-                "course_kw": course_kw,
+                "course_kw": course_kw, "want_kind": want_kind,
                 "reason": "这句是陈述（含否定），我不去查数据"
                           + (f"；顺带提到“{matched_time}”" if matched_time else "")}
 
     # 必须出现真正的查询词，避免"今天天气不错"被误当成查作业
     if has_query_word:
         return {"is_query": True, "negated": False, "days": days,
-                "course_kw": course_kw, "reason": "识别为查询"}
+                "course_kw": course_kw, "want_kind": want_kind,
+                "reason": "识别为查询"}
 
     if course_kw:
         return {"is_query": True, "negated": False, "days": days,
-                "course_kw": course_kw, "reason": f"按课程“{course_kw}”查询"}
+                "course_kw": course_kw, "want_kind": want_kind,
+                "reason": f"按课程“{course_kw}”查询"}
 
     return {"is_query": False, "negated": False, "days": None,
-            "course_kw": None, "reason": "没听懂，请换一种说法"}
+            "course_kw": None, "want_kind": None, "reason": "没听懂，请换一种说法"}
 
 
 HELP_TEXT = """我可以回答这几类问题：
-  · 我还有哪些作业没交
+  · 我还有哪些作业没交          （只问「截止」）
   · 明天有什么要交的
   · 这周还有什么没交
   · 高数有什么作业
+  · 我明天有什么日程            （只问「日程」）
+  · 下周有哪些课和考试
+  · 这周有什么安排              （两种都列出来）
   （否定句会被当成陈述，比如「明天没什么要交的」不会去查数据）
 """

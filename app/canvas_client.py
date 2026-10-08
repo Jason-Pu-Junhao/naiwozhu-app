@@ -77,6 +77,10 @@ class CanvasClient:
     def me(self):
         return self._get("/api/v1/users/self").json()
 
+    def profile(self):
+        """个人信息。学号（login_id）只有这个接口里有，me() 里是 null。"""
+        return self._get("/api/v1/users/self/profile").json()
+
     def courses(self, include_term=True):
         params = {"enrollment_state": "active"}
         if include_term:
