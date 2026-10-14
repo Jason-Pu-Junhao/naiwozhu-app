@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "奶我助 · 交我办日历同步",
+  "version": "1.0.0",
+  "description": "把交我办日历的日程推给本机运行的「奶我助」，打开页面就自动同步。",
+  "content_scripts": [
+    {
+      "matches": ["https://calendar.sjtu.edu.cn/*"],
+      "js": ["naiwozhu.user.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"]
+}

@@ -81,25 +81,44 @@ export CANVAS_TOKEN='你复制的令牌'            # 或者临时用环境变�
 **② 交我办日历（日程）**
 
 交我办没有公开 API，靠的是**你已登录的浏览器页面**里的内部接口。
-`tools/sjtu_calendar_export.js` 在那张页面上跑，用你的登录会话读数据。
+`tools/browser/naiwozhu.user.js` 在那张页面上跑，用你的登录会话读数据。
 
-一个文件，两种跑法，差别只在**最后一步数据送到哪**：
+同一份脚本，三种装法，差别只在**最后一步数据送到哪**：
 
-**省事：装一次用户脚本，以后零点击**
+| 装法 | 跨域那一跳谁发 | 需要什么 |
+|---|---|---|
+| 「奶我助」自带的扩展 | 扩展后台 service worker | 什么都不用装、不用联网 |
+| Tampermonkey / Violentmonkey | `GM_xmlhttpRequest` | 一个用户脚本管理器 |
+| 贴进控制台 | 不推，落成文件 | 什么都不装，但每次手动 |
 
-1. 浏览器装 **Tampermonkey** 或 **Violentmonkey**（装一个就行，作用一样）
-   - Tampermonkey：[Chrome 商店](https://chromewebstore.google.com/detail/dhdgffkkebhmkfjojejmpbldmpobfkfo) · [官网（按浏览器选）](https://www.tampermonkey.net/)
-   - Violentmonkey：[Chrome 商店](https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag) · [官网（按浏览器选）](https://violentmonkey.github.io/get-it/)
+三种都**不需要给本地服务加 CORS**（原因见下面「跨域那一跳」）。
 
-   配置页上把这几个链接都列出来了，不用去别处找。
-2. 打开「奶我助」的配置页，点「**安装自动同步脚本**」（就是
-   <http://127.0.0.1:5173/naiwozhu.user.js>，管理器会拦截 `.user.js` 导航并弹安装界面）
-3. 以后打开 <https://calendar.sjtu.edu.cn/ui/calendar>，右下角会出现一个「奶我助」小面板，
-   它自己读数据、自己推给本机
+**① 装「奶我助」自带的扩展**（不需要管理器、不需要联网）
 
-> **点「安装自动同步脚本」只是打开一段代码文本？** 说明第 1 步的管理器还没装好。
+1. 浏览器地址栏输入 `chrome://extensions`，打开右上角的**开发者模式**
+2. 点「**加载已解压的扩展程序**」，选中 `tools/browser` 这个目录
+   （配置页上直接显示这个目录的绝对路径，还有一个「复制路径」按钮）
+3. 打开 <https://calendar.sjtu.edu.cn/ui/calendar>，右下角会出现「奶我助」面板
+
+要把扩展放到别处或发给别人，配置页上还有个 [下载 zip](http://127.0.0.1:5173/naiwozhu-extension.zip)，
+解压之后再选。
+
+**② 装 Tampermonkey / Violentmonkey**
+
+1. 装一个管理器（装一个就行，作用一样）。配置页上给了两个**国内能直连**的链接：
+   - [Edge 商店 · Tampermonkey](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
+   - [Edge 商店 · Violentmonkey](https://microsoftedge.microsoft.com/addons/detail/eeagobfjdenkkddmbclomhiblgggliao)
+   - 其他浏览器去官网按浏览器选：[Tampermonkey](https://www.tampermonkey.net/) · [Violentmonkey](https://violentmonkey.github.io/get-it/)
+2. 点「**安装自动同步脚本**」（就是 <http://127.0.0.1:5173/naiwozhu.user.js>，
+   管理器会拦截 `.user.js` 导航并弹安装界面）
+3. 打开 <https://calendar.sjtu.edu.cn/ui/calendar>，右下角出现「奶我助」小面板
+
+> **点「安装自动同步脚本」只是打开一段代码文本？** 说明管理器还没装好。
 > 那个链接全靠管理器拦截导航，没有管理器，浏览器就只是把文件当文本打开。
-> 装好管理器、刷新配置页，再点一次。
+
+> **Chrome 网上应用店国内打不开**，而里面下的 `.crx` 文件 Chrome 也不让装
+> （会报 `CRX_REQUIRED_PROOF_MISSING`）。所以别去找离线包——要么走上面微软的商店，
+> 要么用方式 ①。
 
 自动同步有 30 分钟的最小间隔，避免每次翻页都重推。面板上可以随时点「立即同步」
 或「下载 JSON」。本地服务没在跑的时候，面板会提示你去 `bash app/run.sh`。
@@ -107,7 +126,7 @@ export CANVAS_TOKEN='你复制的令牌'            # 或者临时用环境变�
 **配置页会自己盯着。** 停在配置页时它每 5 秒问一次服务端；一旦脚本把数据推了进来，
 页面就自己进主界面，不用手动刷新，也不用点「进入」。
 
-**不装扩展：手动跑一遍**
+**③ 什么都不装：手动跑一遍**
 
 1. 浏览器登录 <https://calendar.sjtu.edu.cn/ui/calendar>
 2. 在这张页面上按 **F12** → **Console**，粘贴脚本内容，回车
@@ -224,23 +243,57 @@ Canvas 抓一次要遍历所有课程逐页翻，比较慢。所以 Canvas 那�
 
 ## 自动同步交我办
 
-`tools/sjtu_calendar_export.js` 既是用户脚本，也是能贴进控制台的普通脚本。
-判断标准就一条：**`GM_xmlhttpRequest` 存不存在**。
+`tools/browser/naiwozhu.user.js` 一份文件，跑在三种环境里，靠"有没有这个能力"判断：
 
-| | 装了用户脚本管理器 | 贴进控制台 |
+```js
+const hasGM  = typeof GM_xmlhttpRequest === 'function';       // Tampermonkey 等
+const hasExt = !!(chrome.runtime && chrome.runtime.id);       // 「奶我助」扩展
+const canAuto = hasGM || hasExt;    // 能自动推 → 挂面板；否则只能下载文件
+```
+
+| 环境 | 触发 | 数据送到哪 |
 |---|---|---|
-| 触发 | 打开日历页自动跑 | 你手动回车 |
-| 数据送到哪 | `GM_xmlhttpRequest` POST 给 `127.0.0.1:5173` | 下载 JSON，你再拖进来 |
-| 本地服务要加 CORS 吗 | **不用** | 不用 |
+| 扩展 | 打开日历页自动跑 | 发消息给后台，后台 POST 给 `127.0.0.1:5173` |
+| 管理器 | 打开日历页自动跑 | `GM_xmlhttpRequest` POST 给 `127.0.0.1:5173` |
+| 控制台 | 你手动回车 | 下载 JSON，你再拖进来 |
 
-### 推送为什么走 `GM_xmlhttpRequest`
+### 跨域那一跳为什么单独拎出来
 
-`fetch` 从网页发出去，受页面的跨域规则限制——网页没法随便往 `http://127.0.0.1` 写数据。
+浏览器不允许**网页**随手往 `http://127.0.0.1` 写数据——那正是跨域规则在管的事。
 要给 `fetch` 放行，本地服务就得加 CORS 头；而只要加了，**你浏览器里访问的任何
 一个网页都能往你的本地服务 POST**，伪造日程或者把你的课表读走。
 
-`GM_xmlhttpRequest` 由用户脚本管理器代发，不受页面的跨域限制（配合
-`@connect 127.0.0.1` 白名单），所以**本地服务一行 CORS 都不用加**，那个风险面直接不存在。
+所以两条自动路径都是让"有权限的一方"代发，**本地服务一行 CORS 都不用加**，
+那个风险面直接不存在：
+
+- **扩展** → 后台 service worker。`manifest.json` 里声明了
+  `host_permissions: ["http://127.0.0.1/*"]`，它就能直接请求本机。
+  这也是为什么扩展要拆成两个文件：内容脚本只干"在日历页上取数"，
+  把"碰网络"集中在 `background.js` 里。
+- **管理器** → `GM_xmlhttpRequest`，配合 `@connect 127.0.0.1` 白名单。
+
+### 自动同步为什么有最小间隔
+
+打开一次页面就推一次是浪费。默认 30 分钟内只推一次，面板上可以手动覆盖。
+重复推送本身是安全的：脚本和「奶我助」都按 `exported_at` 判新旧，旧数据会被忽略
+（面板上会显示"这次跳过"）。
+
+这个时间戳存在扩展的 `chrome.storage.local` 或管理器的 `GM_setValue` 里。
+贴进控制台跑的时候只在内存里记，**不去动交我办页面自己的 `localStorage`**。
+
+### 它做不到的
+
+**三种装法都不是后台任务**，浏览器关着就不会同步。要真正无人值守，得用持久化浏览器配置
+加定时任务（让浏览器自己带着会话发请求，不读也不导出 cookie），重得多，这个阶段没做。
+
+### 关于 Chrome 网上应用店
+
+国内打不开，而且**里面下的 `.crx` 文件 Chrome 也不让装**
+（`CRX_REQUIRED_PROOF_MISSING` —— Chrome 只认商店直接安装的扩展）。
+所以"离线 crx 包"这条路根本走不通，别去找。
+
+能用的两条：微软的 Edge 商店（国内一般能直连，配置页上有链接），
+或者「奶我助」自带的扩展（完全不联网）。
 
 ### 自动同步为什么有最小间隔
 
@@ -278,12 +331,19 @@ Canvas 抓一次要遍历所有课程逐页翻，比较慢。所以 Canvas 那�
 | `test_query.py` | 查询解析的 19 个用例 |
 | `test_ddl.py` | 取数/去重/翻页的验证（19 项，用模拟数据） |
 | `test_store.py` | 交我办导入 + 两种类型的 46 项验证（用模拟数据） |
-| `test_server.py` | 网页服务层 80 项：接口形状、标签页取数、演示模式、缓存、脚本分发（用假的 Canvas） |
+| `test_server.py` | 网页服务层 92 项：接口形状、标签页取数、演示模式、缓存、浏览器端分发（用假的 Canvas） |
 | `testdata/sample_calendar_export.json` | 伪造的示例导出文件，用来离线验证导入链路 |
 
-`../tools/sjtu_calendar_export.js` 是在交我办页面上运行的脚本，一份代码两种跑法（见上面「自动同步交我办」）。
-它有两个出口：配置页的「复制脚本」走 `GET /api/export-script`（拿源码去粘贴），
-「安装自动同步脚本」走 `GET /naiwozhu.user.js`（`.user.js` 结尾，管理器会拦截并弹安装界面）。
+浏览器端的东西都在 `../tools/browser/`，见那里的 README：
+
+| 文件 | 作用 |
+|---|---|
+| `naiwozhu.user.js` | 同一份脚本，三种装法都用它 |
+| `manifest.json` / `background.js` | 「奶我助」自带的 Chrome 扩展（跨域那一跳在后台） |
+| `README.md` | 三种装法、权限说明 |
+
+它有三个出口：`GET /naiwozhu.user.js`（给管理器装）、`GET /api/export-script`
+（拿源码去控制台粘贴）、`GET /naiwozhu-extension.zip`（打包下载扩展）。
 
 本地数据都在 `app/data/`（不进 Git）：
 
@@ -301,7 +361,7 @@ app/data/inbox/           把导出的 JSON 丢这里，再点「从收件箱导
 ## 怎么验证"做对了"
 
 ```bash
-bash app/run_tests.sh          # 四套测试一起跑，共 164 项
+bash app/run_tests.sh          # 四套测试一起跑，共 176 项
 ```
 
 `test_ddl.py` 重点覆盖两件**最容易静默出错**的事：

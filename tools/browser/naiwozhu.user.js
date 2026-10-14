@@ -14,21 +14,19 @@
 /* ============================================================================
  *  奶我助 · 交我办日历同步
  * ----------------------------------------------------------------------------
- *  一个文件，两种跑法
+ *  同一份代码，三种装法，差别只在**最后一步数据送到哪**
  *
- *   ① 装进 Tampermonkey（推荐，装一次，以后零点击）
- *      装好用户脚本管理器，把本文件装进去。之后你只要打开
- *      https://calendar.sjtu.edu.cn/ui/calendar，脚本自己读数据、
- *      自己推给本机运行的「奶我助」。右下角有个小面板显示结果，
- *      也可以手动点「立即同步」。
+ *   ① 装「奶我助」自带的扩展（不需要管理器、不需要联网装东西）
+ *      在 chrome://extensions 里打开「开发者模式」→「加载已解压的扩展程序」，
+ *      选 tools/browser 这个目录。之后打开日历页就自动同步。
+ *      跨域那一跳交给扩展的后台（见 background.js），本地服务不用加 CORS。
  *
- *   ② 贴进控制台（不想装扩展时用）
- *      在交我办日历页面上按 F12 → Console，把本文件全部内容粘进去回车。
- *      会下载一个 sjtu-calendar-<时间戳>.json，拖进「奶我助」网页。
+ *   ② 装进 Tampermonkey / Violentmonkey
+ *      把本文件装进管理器。跨域那一跳走 GM_xmlhttpRequest，同样不用加 CORS。
  *
- *  两种跑法的区别只在**最后一步数据送到哪**：
- *      装了管理器 → GM_xmlhttpRequest 直接 POST 给本机服务（不受 CORS 限制）
- *      贴在控制台 → 浏览器不给网页随便写本机服务，所以落成一个文件让你拖
+ *   ③ 贴进控制台（什么都不装）
+ *      在日历页上按 F12 → Console，把本文件全部内容粘进去回车。
+ *      浏览器不给网页随手写本机服务，所以落成一个 JSON 文件让你拖。
  *
  *  为什么不需要密码、也不需要抓 cookie
  *    脚本在你**已经登录的这个页面自己的源里**发请求，浏览器自动带上会话。
@@ -51,16 +49,31 @@
 
   const ORIGIN = location.origin;
 
-  // 装了用户脚本管理器时这两个才有定义；贴在控制台里就是 undefined
-  const hasGM = typeof GM_xmlhttpRequest === 'function';
+  // 三种运行环境，判断依据都是"有没有这个能力"，不靠猜
+  const hasGM = typeof GM_xmlhttpRequest === 'function';       // Tampermonkey 等
+  const hasExt = typeof chrome !== 'undefined' && !!(
+    chrome.runtime && chrome.runtime.id && chrome.runtime.sendMessage);  // 扩展
+  const canAuto = hasGM || hasExt;    // 能自动推 → 挂面板；否则只能下载文件
 
-  // 贴在控制台时不去动交我办页面自己的 localStorage，只在内存里记
+  // 贴在控制台时不写交我办页面自己的存储，只在内存里记
   const mem = {};
-  const store = {
-    get(k, d) { try { return hasGM ? GM_getValue(k, d) : (k in mem ? mem[k] : d); }
-                catch (e) { return d; } },
-    set(k, v) { try { hasGM ? GM_setValue(k, v) : (mem[k] = v); } catch (e) {} },
-  };
+  async function storeGet(k, d) {
+    try {
+      if (hasGM) return GM_getValue(k, d);
+      if (hasExt && chrome.storage) {
+        const o = await chrome.storage.local.get(k);
+        return (k in o) ? o[k] : d;
+      }
+    } catch (e) { /* 存储不可用就当没存过 */ }
+    return (k in mem) ? mem[k] : d;
+  }
+  async function storeSet(k, v) {
+    try {
+      if (hasGM) { GM_setValue(k, v); return; }
+      if (hasExt && chrome.storage) { await chrome.storage.local.set({ [k]: v }); return; }
+    } catch (e) { /* 同上 */ }
+    mem[k] = v;
+  }
 
   // ============================== 小工具 ==============================
   const pad = n => String(n).padStart(2, '0');
@@ -171,11 +184,28 @@
   /**
    * 交给本机的「奶我助」。
    *
-   * 这里用 GM_xmlhttpRequest，由用户脚本管理器代发，不受网页自身的跨域限制，
-   * 所以本地服务**一行 CORS 都不用加**。
-   * 不加 CORS，就没有"随便哪个网页都能往你本地服务写数据"这个风险。
+   * 这一步**必须绕开网页自己的跨域规则**——网页没法随手往 127.0.0.1 写数据。
+   * 要放行就得给本地服务加 CORS 头，而只要加了，你浏览器里的任何一个网页
+   * 都能往你的本地服务 POST，伪造日程或者把你的课表读走。
+   *
+   * 所以两条路都是让"有权限的一方"代发：
+   *    扩展 → 后台 service worker（manifest 里声明了 host_permissions）
+   *    管理器 → GM_xmlhttpRequest
+   * 两者都不需要本地服务加 CORS，那个风险面也就不存在。
    */
   function pushToLocal(body) {
+    if (hasExt) {
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'naiwozhu-sync', url: SYNC_URL, body },
+          resp => {
+            const err = chrome.runtime.lastError;
+            if (err) return reject(new Error(err.message || '扩展后台没响应'));
+            if (!resp) return reject(new Error('扩展后台没响应'));
+            if (!resp.ok) return reject(new Error(resp.error || `本地服务返回 HTTP ${resp.status}`));
+            resolve({ status: 200, responseText: resp.text });
+          });
+      });
+    }
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: 'POST',
@@ -199,7 +229,7 @@
     if (r.status !== 200 || !d.ok) {
       throw new Error(d.error || `本地服务返回 HTTP ${r.status}`);
     }
-    store.set(STATE_KEY, Date.now());
+    await storeSet(STATE_KEY, Date.now());
     return { count: payload.events.length, message: d.message || '已同步', stale: !!d.stale };
   }
 
@@ -216,7 +246,7 @@
     window.__naiwozhu_export = payload;
   }
 
-  // ============================== 面板（只在装了管理器时出现）=============
+  // ============================== 面板 ==============================
   let ui = null;
 
   function mountPanel() {
@@ -274,8 +304,11 @@
       },
     };
 
-    const last = Number(store.get(STATE_KEY, 0)) || 0;
-    panel.setFoot(last ? `上次同步 ${hhmm(new Date(last))}` : '还没同步过');
+    panel.setFoot('读取中…');
+    storeGet(STATE_KEY, 0).then(last => {
+      const t = Number(last) || 0;
+      panel.setFoot(t ? `上次同步 ${hhmm(new Date(t))}` : '还没同步过');
+    });
 
     root.addEventListener('click', async e => {
       const b = e.target.closest('[data-a]');
@@ -331,7 +364,7 @@
   /** 本地服务没开是常态，措辞别吓人。 */
   function hint(err) {
     const m = String((err && err.message) || err);
-    if (/连不上本地服务|超时|Failed to fetch|NetworkError/i.test(m)) {
+    if (/连不上本地服务|没响应|超时|Failed to fetch|NetworkError/i.test(m)) {
       return '连不上本地服务。\n先把「奶我助」跑起来（bash app/run.sh），再点「立即同步」。';
     }
     return m;
@@ -339,7 +372,7 @@
 
   // ============================== 自动同步 ==============================
   async function maybeAutoSync() {
-    const last = Number(store.get(STATE_KEY, 0)) || 0;
+    const last = Number(await storeGet(STATE_KEY, 0)) || 0;
     const left = MIN_INTERVAL_MS - (Date.now() - last);
     if (left > 0) {
       ui.set(`距上次同步不到 ${MIN_INTERVAL_MS / 60000} 分钟，这次跳过。\n`
@@ -361,8 +394,8 @@
                  + '当前页面是 ' + location.hostname + '，接口大概率读不到。');
     }
 
-    if (!hasGM) {
-      // ---------- 控制台模式：下载文件 ----------
+    if (!canAuto) {
+      // ---------- 控制台模式：只能下载文件 ----------
       console.log('%c[奶我助] 开始读取交我办日历…', 'color:#1B3A6B;font-weight:bold');
       const out = await collect();
       download(out);
@@ -372,7 +405,7 @@
       if (out.payload.errors.length) {
         console.warn('[奶我助] 有抓取失败的区间：', out.payload.errors);
       }
-      console.log('  tip：装一个用户脚本管理器（Tampermonkey）装上本脚本，'
+      console.log('  tip：装「奶我助」自带的扩展（tools/browser），或者装个用户脚本管理器，'
                 + '以后打开这个页面就会自动同步，不用再贴代码、也不用拖文件。');
       console.log('  如果没看到下载，数据已放在 window.__naiwozhu_export，'
                 + '执行下面这行可复制到剪贴板：');
@@ -380,7 +413,7 @@
       return;
     }
 
-    // ---------- 用户脚本模式：自动同步 ----------
+    // ---------- 扩展 / 管理器模式：自动同步 ----------
     ui = mountPanel();
     setTimeout(maybeAutoSync, 1500);
   }

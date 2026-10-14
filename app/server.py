@@ -13,16 +13,18 @@
     交我办日历               → 日程，走浏览器导出脚本 + 本机导入
     网页 / 语音自行录入      → 两种都行，录入时自己说明是哪一种
 """
+import io
 import os
 import sys
-import time
 import threading
+import time
 import webbrowser
+import zipfile
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory
 
 import config
 import demo
@@ -34,7 +36,12 @@ import query as q
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-EXPORT_SCRIPT = os.path.join(ROOT, "tools", "sjtu_calendar_export.js")
+# 浏览器端的东西都在 tools/browser/：
+#   naiwozhu.user.js             一份脚本，三种装法（扩展 / 管理器 / 控制台）都用它
+#   manifest.json background.js  「奶我助」自带的 Chrome 扩展
+BROWSER_DIR = os.path.join(ROOT, "tools", "browser")
+EXPORT_SCRIPT = os.path.join(BROWSER_DIR, "naiwozhu.user.js")
+EXTENSION_ZIP = "naiwozhu-extension.zip"
 
 # Canvas 抓一次要遍历所有课程逐页翻，比较慢；同一个结果在这么多秒内复用，
 # 不同问法共用同一次抓取。设 0 等于关掉缓存。
@@ -146,6 +153,10 @@ def api_status():
         "inbox": store.inbox,
         "manual_count": len(store.manual_items()),
         "has_export_script": os.path.exists(EXPORT_SCRIPT),
+        # 自查扩展：目录路径直接给网页，「加载已解压的扩展程序」时选它
+        "extension_dir": BROWSER_DIR,
+        "has_extension": os.path.isfile(os.path.join(BROWSER_DIR, "manifest.json")),
+        "extension_zip": "/" + EXTENSION_ZIP,
         # 「首次配置」是否完成：交我办日历导进来过就算完成。
         # 用"快照文件存不存在"来判断，不额外存一个标志位——
         # 哪怕导进来 0 条也算配置过，不会把人弹回配置页。
@@ -245,6 +256,30 @@ def userscript():
     return send_from_directory(os.path.dirname(EXPORT_SCRIPT),
                                os.path.basename(EXPORT_SCRIPT),
                                mimetype="text/javascript")
+
+
+@app.get("/" + EXTENSION_ZIP)
+def extension_zip():
+    """把自查扩展打包下载。
+
+    为什么不是 .crx：Chrome 拒绝安装商店外的 .crx（CRX_REQUIRED_PROOF_MISSING），
+    所以那个格式发出去也装不上。能装上的是**解压后的目录**，
+    所以这里发的是 zip —— 解压出来在 chrome://extensions 里「加载已解压的扩展程序」。
+
+    配置页上其实直接给目录路径更省事（同一台机器的话连下载都不用）。
+    这个 zip 是给"想把扩展放到别处 / 发给别人"的场合。
+    """
+    if not os.path.isdir(BROWSER_DIR):
+        return jsonify({"ok": False, "error": "找不到扩展目录"}), 404
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in sorted(os.listdir(BROWSER_DIR)):
+            path = os.path.join(BROWSER_DIR, name)
+            if os.path.isfile(path) and not name.startswith("."):
+                z.write(path, os.path.join("naiwozhu-extension", name))
+    buf.seek(0)
+    return send_file(buf, mimetype="application/zip",
+                     as_attachment=True, download_name=EXTENSION_ZIP)
 
 
 # ---------------------------------------------------------------- 手动录入

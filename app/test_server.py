@@ -18,10 +18,13 @@
 运行：
     .venv/bin/python app/test_server.py
 """
+import io
+import json
 import os
 import shutil
 import sys
 import tempfile
+import zipfile
 from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -281,15 +284,16 @@ def main():
         check("关掉演示模式会清缓存",
               c.get("/api/status").get_json()["cache_age"] is None)
 
-        print("\n用户脚本的分发")
+        print("\n浏览器端的分发")
         resp = c.get("/naiwozhu.user.js")
-        check("能取到用户脚本", resp.status_code == 200, resp.status_code)
+        check("能取到脚本", resp.status_code == 200, resp.status_code)
         ct = resp.headers.get("Content-Type") or ""
         check("Content-Type 是 javascript", "javascript" in ct, ct)
         body = resp.get_data(as_text=True)
         check("真的是用户脚本（==UserScript== 头）",
               body.startswith("// ==UserScript=="), body[:40])
-        check("声明了 GM_xmlhttpRequest", "GM_xmlhttpRequest" in body)
+        check("支持 GM_xmlhttpRequest", "GM_xmlhttpRequest" in body)
+        check("支持扩展后台这条通路", "chrome.runtime.sendMessage" in body)
         check("只允许连本机（@connect 127.0.0.1）",
               "@connect      127.0.0.1" in body)
         check("匹配交我办日历页",
@@ -300,6 +304,35 @@ def main():
         r = c.get("/api/export-script").get_json()
         check("复制用的那份是同一个文件",
               bool(r.get("ok")) and "GM_xmlhttpRequest" in r["code"])
+
+        s = c.get("/api/status").get_json()
+        check("状态里给出扩展目录", bool(s.get("extension_dir")), s.get("extension_dir"))
+        check("状态里标明扩展存在", s.get("has_extension") is True)
+
+        print("\n自查扩展的打包")
+        resp = c.get("/naiwozhu-extension.zip")
+        check("能下到扩展 zip", resp.status_code == 200, resp.status_code)
+        z = zipfile.ZipFile(io.BytesIO(resp.data))
+        names = z.namelist()
+        check("zip 里有 manifest.json",
+              any(n.endswith("/manifest.json") for n in names), names)
+        check("zip 里有后台脚本",
+              any(n.endswith("/background.js") for n in names), names)
+        check("zip 里有内容脚本",
+              any(n.endswith("/naiwozhu.user.js") for n in names), names)
+        man = json.loads(z.read([n for n in names if n.endswith("manifest.json")][0]))
+        check("manifest 是 MV3", man.get("manifest_version") == 3, man.get("manifest_version"))
+        check("只匹配交我办日历页",
+              man["content_scripts"][0]["matches"] == ["https://calendar.sjtu.edu.cn/*"],
+              man["content_scripts"][0]["matches"])
+        check("只申请本机 host 权限",
+              all(h.startswith("http://127.0.0.1") or h.startswith("http://localhost")
+                  for h in man["host_permissions"]), man["host_permissions"])
+        check("权限里没有多余的（只要 storage）",
+              man.get("permissions") == ["storage"], man.get("permissions"))
+        bg = z.read([n for n in names if n.endswith("background.js")][0]).decode()
+        check("跨域那一跳放在后台文件里",
+              "fetch(" in bg and "onMessage" in bg)
 
         print("\n令牌流程")
         # 注意：配置文件的路径已经被指到临时目录，这里不会动你真实的令牌。

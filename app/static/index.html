@@ -158,6 +158,10 @@
   .steps li{margin-top:12px;line-height:1.7}
   .steps li:first-child{margin-top:0}
   .steps li > b{color:var(--ink);font-weight:600}
+  .pathrow{display:flex;gap:8px;align-items:flex-start;margin-top:7px}
+  .pathrow code{flex:1;background:var(--navy-l);padding:6px 9px;border-radius:6px;
+                font-size:11.5px;word-break:break-all;line-height:1.55}
+  .pathrow button{flex:none}
   .codebox{margin:10px 0 0 30px;width:calc(100% - 30px);height:140px;
            font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
            border:1px solid var(--line);border-radius:8px;padding:10px}
@@ -220,24 +224,49 @@
     <p>
       课表、活动、讲座这些安排都在交我办里。它<b>没有对外的公开接口</b>，
       程序自己读不到，只能借你已经登录的浏览器会话去读。
-      下面两种做法任选，读到的数据都只送到本机，不经过任何第三方。
+      下面三种做法任选，读到的数据都只送到本机，不经过任何第三方。
     </p>
 
     <div class="way">
-      <div class="way-h"><span class="tag">省事</span>装一次，以后打开日历页就自动同步</div>
+      <div class="way-h"><span class="tag">不装管理器</span>用「奶我助」自带的扩展</div>
+      <p class="waynote">
+        不需要访问任何扩展商店，也不用联网装东西——扩展就在这个项目里。
+        装完打开日历页就自动同步。
+      </p>
+      <ol class="steps">
+        <li>浏览器地址栏输入 <code>chrome://extensions</code>，打开右上角的<b>开发者模式</b></li>
+        <li>
+          点「<b>加载已解压的扩展程序</b>」，选中这个目录：
+          <div class="pathrow">
+            <code id="extDir">…</code>
+            <button class="minibtn" id="copyDir">复制路径</button>
+          </div>
+        </li>
+        <li>打开 <code>calendar.sjtu.edu.cn/ui/calendar</code>，右下角会出现「奶我助」面板</li>
+      </ol>
+      <p class="waynote">
+        扩展就在同一台机器上，第 2 步直接选目录即可。
+        想把它放到别处或发给别人：<a href="/naiwozhu-extension.zip">下载 zip</a>，解压后再选。
+      </p>
+    </div>
+
+    <div class="way">
+      <div class="way-h"><span class="tag">已经装了管理器</span>用 Tampermonkey / Violentmonkey</div>
 
       <ol class="steps">
         <li>
-          <b>先装一个用户脚本管理器</b>
+          <b>没装的话先装一个</b>
           <div class="btnrow" style="margin-top:8px">
             <a class="minibtn" target="_blank" rel="noreferrer"
-               href="https://chromewebstore.google.com/detail/dhdgffkkebhmkfjojejmpbldmpobfkfo">装 Tampermonkey（Chrome）</a>
+               href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd">Edge 商店装 Tampermonkey</a>
             <a class="minibtn" target="_blank" rel="noreferrer"
-               href="https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag">装 Violentmonkey（Chrome）</a>
+               href="https://microsoftedge.microsoft.com/addons/detail/eeagobfjdenkkddmbclomhiblgggliao">Edge 商店装 Violentmonkey</a>
           </div>
           <p class="waynote">
-            两个装一个就行，作用一样。
-            用 Edge / Firefox / Safari 的话去官网按浏览器选：
+            这两个链接走微软的商店，国内一般能直连。两个装一个就行，作用一样。<br>
+            Chrome 网上应用店国内打不开；那里面下的 <code>.crx</code> 文件 Chrome 也<b>不让装</b>
+            （会报 <code>CRX_REQUIRED_PROOF_MISSING</code>），所以别去找离线包。<br>
+            用 Firefox / Safari 的话去官网按浏览器选：
             <a target="_blank" rel="noreferrer" href="https://www.tampermonkey.net/">Tampermonkey 官网</a>
             ·
             <a target="_blank" rel="noreferrer" href="https://violentmonkey.github.io/get-it/">Violentmonkey 官网</a>
@@ -251,8 +280,8 @@
           </div>
           <p class="waynote">
             装好后打开 <code>calendar.sjtu.edu.cn/ui/calendar</code>，
-            右下角会出现一个「奶我助」小面板，它自己读数据、自己推给本机。<br>
-            <b>如果点上面那个按钮只是打开一段代码文本</b>，说明第 1 步的管理器还没装好——
+            右下角会出现「奶我助」小面板，它自己读数据、自己推给本机。<br>
+            <b>如果点上面那个按钮只是打开一段代码文本</b>，说明管理器还没装好——
             回去装好，刷新这一页再点一次。
           </p>
         </li>
@@ -260,7 +289,7 @@
     </div>
 
     <div class="way">
-      <div class="way-h"><span class="tag alt">不装扩展</span>每次手动跑一遍，导出文件再拖进来</div>
+      <div class="way-h"><span class="tag alt">什么都不装</span>每次手动跑一遍，导出文件再拖进来</div>
       <p class="waynote">
         在这张页面上按 F12 → Console，粘贴脚本回车，会下载一个 JSON 文件，
         把它拖到下面的虚线框里。
@@ -482,6 +511,7 @@ async function loadStatus(){
   state.hasData = !!s.configured;
   applyDemo(s.demo, s.demo_banner);
   $('#inboxPath').textContent = s.inbox || '—';
+  $('#extDir').textContent = s.extension_dir || '（找不到扩展目录）';
 
   const c = s.calendar || {};
   const el = $('#calStatus');
@@ -841,6 +871,23 @@ $('#tokenBtn').onclick = async () => {
 };
 
 /* ============================================================ 其它 */
+$('#copyDir').onclick = async () => {
+  const btn = $('#copyDir');
+  const path = $('#extDir').textContent.trim();
+  try {
+    await navigator.clipboard.writeText(path);
+    btn.textContent = '已复制 ✓';
+  } catch (e) {
+    // 剪贴板不给用就把路径选中，让人按 Ctrl+C
+    const r = document.createRange();
+    r.selectNodeContents($('#extDir'));
+    const sel = getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    btn.textContent = '按 Ctrl+C';
+  }
+  setTimeout(() => { btn.textContent = '复制路径'; }, 2000);
+};
+
 $('#settingsBtn').onclick = () => showView('setup');
 $('#startBtn').onclick = () => showView('main');
 
