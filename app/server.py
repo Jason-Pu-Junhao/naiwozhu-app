@@ -232,6 +232,21 @@ def api_export_script():
                         "path": os.path.relpath(EXPORT_SCRIPT, ROOT)})
 
 
+@app.get("/naiwozhu.user.js")
+def userscript():
+    """把同一份脚本以 .user.js 提供出去。
+
+    用户脚本管理器（Tampermonkey / Violentmonkey）会拦截 .user.js 的导航
+    并弹出安装界面，所以配置页上给个链接就够了，不用让人复制几百行去粘贴。
+    给控制台用的那份代码走 /api/export-script，两边是同一个文件。
+    """
+    if not os.path.exists(EXPORT_SCRIPT):
+        return jsonify({"ok": False, "error": "找不到脚本文件"}), 404
+    return send_from_directory(os.path.dirname(EXPORT_SCRIPT),
+                               os.path.basename(EXPORT_SCRIPT),
+                               mimetype="text/javascript")
+
+
 # ---------------------------------------------------------------- 手动录入
 @app.get("/api/manual")
 def api_manual_list():

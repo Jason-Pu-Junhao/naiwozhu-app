@@ -281,6 +281,26 @@ def main():
         check("关掉演示模式会清缓存",
               c.get("/api/status").get_json()["cache_age"] is None)
 
+        print("\n用户脚本的分发")
+        resp = c.get("/naiwozhu.user.js")
+        check("能取到用户脚本", resp.status_code == 200, resp.status_code)
+        ct = resp.headers.get("Content-Type") or ""
+        check("Content-Type 是 javascript", "javascript" in ct, ct)
+        body = resp.get_data(as_text=True)
+        check("真的是用户脚本（==UserScript== 头）",
+              body.startswith("// ==UserScript=="), body[:40])
+        check("声明了 GM_xmlhttpRequest", "GM_xmlhttpRequest" in body)
+        check("只允许连本机（@connect 127.0.0.1）",
+              "@connect      127.0.0.1" in body)
+        check("匹配交我办日历页",
+              "@match        https://calendar.sjtu.edu.cn/" in body)
+        check("推的是本机 /api/import", "/api/import" in body)
+        check("没有把数据发往第三方",
+              "api.github" not in body and "gist" not in body.lower())
+        r = c.get("/api/export-script").get_json()
+        check("复制用的那份是同一个文件",
+              bool(r.get("ok")) and "GM_xmlhttpRequest" in r["code"])
+
         print("\n令牌流程")
         # 注意：配置文件的路径已经被指到临时目录，这里不会动你真实的令牌。
         r = c.post("/api/token", json={"token": ""}).get_json()

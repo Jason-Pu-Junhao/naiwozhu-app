@@ -136,6 +136,22 @@
   .minibtn{font-size:13px;padding:7px 13px;border-radius:7px;border:1px solid var(--line);
            color:var(--navy);font-weight:600;background:#fff}
   .minibtn:hover{border-color:var(--navy);background:var(--navy-l)}
+  a.minibtn{display:inline-block;text-decoration:none;line-height:1.5}
+  .minibtn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .minibtn.primary:hover{background:#122747;border-color:#122747}
+
+  /* 同一件事的两种做法，各占一块 */
+  .way{margin:14px 0 0 30px;border:1px solid var(--line);border-radius:9px;
+       padding:14px 16px}
+  .way-h{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600}
+  .tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;
+       background:var(--navy-l);color:var(--navy);white-space:nowrap}
+  .tag.alt{background:#F1F3F7;color:var(--faint)}
+  .way .btnrow,.way .drop,.way details,.way .codebox{margin-left:0}
+  .way .drop{margin-top:11px}
+  .way details{margin-top:11px}
+  .waynote{margin:7px 0 0;font-size:12.5px;color:var(--faint);line-height:1.7}
+  .waynote a{color:var(--navy)}
   .codebox{margin:10px 0 0 30px;width:calc(100% - 30px);height:140px;
            font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
            border:1px solid var(--line);border-radius:8px;padding:10px}
@@ -197,37 +213,57 @@
     </div>
     <p>
       课表、活动、讲座这些安排都在交我办里。它<b>没有对外的公开接口</b>，
-      程序自己读不到，所以靠你在已登录的浏览器页面上跑一段脚本，
-      把数据导出成一个 JSON 文件。把那个文件拖到下面就行。
+      程序自己读不到，只能借你已经登录的浏览器会话去读。
+      下面两种做法任选，读到的数据都只送到本机，不经过任何第三方。
     </p>
 
-    <div class="drop" id="drop">
-      把导出脚本生成的 <b>JSON</b> 拖到这里，或
-      <button class="minibtn" id="pickBtn" style="margin-left:4px">选择文件</button>
-      <input type="file" id="fileInput" accept=".json,application/json" hidden>
-      <div style="margin-top:8px;font-size:12.5px" id="dropName"></div>
-    </div>
-
-    <div class="btnrow">
-      <button class="minibtn" id="copyScript">复制导出脚本</button>
-      <button class="minibtn" id="scanBtn">从收件箱导入</button>
-    </div>
-    <textarea class="codebox" id="codeBox" readonly hidden></textarea>
-
-    <details>
-      <summary>怎么拿到这个 JSON 文件？（三步）</summary>
-      <ol>
-        <li>浏览器登录 <code>calendar.sjtu.edu.cn/ui/calendar</code></li>
-        <li>在这张页面上按 <b>F12</b> → <b>Console</b>，粘贴刚复制的脚本，回车</li>
-        <li>会下载一个 <code>sjtu-calendar-&lt;时间戳&gt;.json</code>，拖到上面的虚线框里</li>
-      </ol>
-      <div style="margin-top:8px;line-height:1.8">
-        脚本在<b>你自己的页面里</b>运行，借你已经登录的会话读数据。
-        它不登录、不读 cookie、不保存密码，也不把数据发给任何第三方。<br>
-        也可以把下载好的文件放进收件箱，再点「从收件箱导入」：<br>
-        <code id="inboxPath">…</code>
+    <div class="way">
+      <div class="way-h"><span class="tag">省事</span>装一次，以后打开日历页就自动同步</div>
+      <p class="waynote">
+        需要先装用户脚本管理器（<b>Tampermonkey</b> 或 <b>Violentmonkey</b>），
+        装好后点下面这个按钮，管理器会弹出安装界面。
+        之后你打开交我办日历页，右下角会出现一个「奶我助」小面板，
+        它自己读数据、自己推给本机，不用再贴代码、也不用拖文件。
+      </p>
+      <div class="btnrow">
+        <a class="minibtn primary" href="/naiwozhu.user.js">安装自动同步脚本</a>
       </div>
-    </details>
+    </div>
+
+    <div class="way">
+      <div class="way-h"><span class="tag alt">不装扩展</span>每次手动跑一遍，导出文件再拖进来</div>
+      <p class="waynote">
+        在这张页面上按 F12 → Console，粘贴脚本回车，会下载一个 JSON 文件，
+        把它拖到下面的虚线框里。
+      </p>
+      <div class="btnrow">
+        <button class="minibtn" id="copyScript">复制脚本</button>
+        <button class="minibtn" id="scanBtn">从收件箱导入</button>
+      </div>
+      <div class="drop" id="drop">
+        把导出脚本生成的 <b>JSON</b> 拖到这里，或
+        <button class="minibtn" id="pickBtn" style="margin-left:4px">选择文件</button>
+        <input type="file" id="fileInput" accept=".json,application/json" hidden>
+        <div style="margin-top:8px;font-size:12.5px" id="dropName"></div>
+      </div>
+
+      <textarea class="codebox" id="codeBox" readonly hidden></textarea>
+
+      <details>
+        <summary>怎么拿到这个 JSON 文件？（三步）</summary>
+        <ol>
+          <li>浏览器登录 <code>calendar.sjtu.edu.cn/ui/calendar</code></li>
+          <li>在这张页面上按 <b>F12</b> → <b>Console</b>，粘贴刚复制的脚本，回车</li>
+          <li>会下载一个 <code>sjtu-calendar-&lt;时间戳&gt;.json</code>，拖到上面的虚线框里</li>
+        </ol>
+        <div style="margin-top:8px;line-height:1.8">
+          脚本在<b>你自己的页面里</b>运行，借你已经登录的会话读数据。
+          它不登录、不读 cookie、不保存密码，也不把数据发给任何第三方。<br>
+          也可以把下载好的文件放进收件箱，再点「从收件箱导入」：<br>
+          <code id="inboxPath">…</code>
+        </div>
+      </details>
+    </div>
 
     <div class="status" id="calStatus">正在读取状态…</div>
   </div>
