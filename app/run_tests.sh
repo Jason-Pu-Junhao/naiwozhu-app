@@ -10,3 +10,6 @@ echo "=========== 取数/翻页/去重验证 ==========="
 echo
 echo "=========== 交我办导入 + 两种日期类型 ==========="
 .venv/bin/python app/test_store.py
+echo
+echo "=========== 网页服务：接口 / 演示模式 / 缓存 ==========="
+.venv/bin/python app/test_server.py

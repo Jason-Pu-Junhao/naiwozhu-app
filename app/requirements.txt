@@ -1,0 +1,12 @@
+# 奶我助 · 第一阶段（本地网页版）运行期依赖
+#
+# 装依赖：
+#     python3 -m venv .venv
+#     .venv/bin/pip install -r app/requirements.txt
+#
+# 只要这两个。仓库里 out/ 下那几个文档和 PPT 另有一批依赖
+# （python-docx / python-pptx / matplotlib / pymupdf），
+# 只有要重新生成它们时才需要，这里刻意不列。
+
+Flask>=3.0
+requests>=2.31

@@ -18,6 +18,13 @@
   header{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
   h1{font-size:24px;color:var(--navy);margin:0}
   .sub{color:var(--gray);font-size:13px}
+  .demo-switch{margin-left:auto;display:inline-flex;align-items:center;gap:7px;
+               font-size:13px;color:var(--gray);cursor:pointer;user-select:none}
+  .demo-switch input{width:16px;height:16px;accent-color:var(--orange);cursor:pointer}
+  .demo-switch.on{color:var(--orange);font-weight:600}
+  .banner{background:var(--orange-l);border:1px solid #F0CFAF;color:#8A4B12;
+          border-radius:10px;padding:11px 14px;margin-top:14px;font-size:13px;
+          line-height:1.65}
   .card{background:#fff;border:1px solid var(--line);border-radius:12px;
         padding:18px 20px;margin-top:16px;box-shadow:0 1px 3px rgba(27,58,107,.05)}
   .ask{display:flex;gap:10px}
@@ -28,6 +35,9 @@
   .ask button{font-size:15px;font-weight:600;padding:12px 22px;border:0;border-radius:9px;
               background:var(--navy);color:#fff}
   .ask button:hover{background:var(--navy-d)}
+  .ask button.ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line);
+                    font-weight:600;padding:12px 16px}
+  .ask button.ghost:hover{background:var(--navy-l);border-color:var(--navy)}
   .ask button:disabled{opacity:.5;cursor:default}
   .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
   .chip{font-size:12.5px;padding:6px 12px;border-radius:20px;border:1px solid var(--line);
@@ -105,7 +115,13 @@
   <header>
     <h1>奶我助</h1>
     <span class="sub">待交作业 + 日程 · 本地网页版</span>
+    <label class="demo-switch" id="demoSwitch" title="打开后不联网，用编好的数据演示">
+      <input type="checkbox" id="demoChk">
+      <span>演示数据</span>
+    </label>
   </header>
+
+  <div class="banner" id="banner" style="display:none"></div>
 
   <!-- 令牌未配置时显示 -->
   <div class="card" id="tokenCard" style="display:none">
@@ -168,6 +184,7 @@
       <input id="mTitle" placeholder="标题，比如「高数第三章作业」" autocomplete="off">
       <input id="mWhen" type="datetime-local">
       <input id="mEnd" type="datetime-local" style="display:none">
+      <input id="mExtra" placeholder="课程名（可选）" autocomplete="off">
       <button id="mAdd">添加</button>
     </div>
     <div class="hint" id="mHint">
@@ -180,6 +197,7 @@
     <div class="ask">
       <input id="q" placeholder="问一句，比如：我还有哪些作业没交" autocomplete="off">
       <button id="askBtn">查询</button>
+      <button id="refreshBtn" class="ghost" title="跳过缓存，重新从 Canvas 取一次">刷新</button>
     </div>
     <div class="chips">
       <span class="chip">我还有哪些作业没交</span>
@@ -251,8 +269,12 @@ function card(it){
 }
 function renderItems(items){
   if(!items.length){
+    // 这里刻意用 <strong>：.empty b 被定义成了 display:block 的大字标题，
+    // 提示语里的强调要是也用 <b>，会被撑成独立一行的大字。
     listEl.innerHTML = `<div class="empty"><b>没有找到符合条件的条目</b>
-      可以试试放宽时间范围（比如问“这周有什么安排”）</div>`;
+      可以试试放宽时间范围（比如问“这周有什么安排”）<br>
+      <span style="font-size:13px">想看页面满起来是什么样，打开顶部的
+      <strong style="color:var(--navy)">演示数据</strong>开关。</span></div>`;
     return;
   }
   listEl.innerHTML = items.map(card).join('');
@@ -269,16 +291,18 @@ listEl.addEventListener('click', async e => {
 });
 
 /* ---------------------------------------------------------- 查询 */
-async function ask(text){
-  const btn = $('#askBtn');
-  btn.disabled = true;
+async function ask(text, opts){
+  opts = opts || {};
+  const btn = $('#askBtn'), rbtn = $('#refreshBtn');
+  btn.disabled = true; rbtn.disabled = true;
   noteEl.className = 'note';
-  noteEl.innerHTML = `<span class="spin"></span>正在查询…`;
+  noteEl.innerHTML = `<span class="spin"></span>` +
+    (opts.refresh ? '正在重新取数据…' : '正在查询…');
   listEl.innerHTML = '';
   try{
     const r = await fetch('/api/query', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({text})
+      body: JSON.stringify({text, refresh: !!opts.refresh})
     });
     const d = await r.json();
     if(!r.ok){
@@ -294,11 +318,17 @@ async function ask(text){
         如果确实想查，可以问“<b>明天有什么要交的</b>”</div>`;
       return;
     }
+    applyDemo(d.demo, d.demo_banner);
     const bits = [];
     if (d.count) {
       const dl = (d.items||[]).filter(i=>i.kind==='deadline').length;
       const sc = (d.items||[]).length - dl;
       bits.push(`共 ${d.count} 项` + (dl&&sc ? `（截止 ${dl} · 日程 ${sc}）` : ''));
+    }
+    if (d.demo) {
+      bits.push('演示数据');
+    } else if (d.cache_age != null) {
+      bits.push(`Canvas 数据更新于 ${fmtClock(Date.now() - d.cache_age*1000)}`);
     }
     if (d.warning) bits.push(`⚠ ${d.warning}`);
     noteEl.className = d.warning ? 'note warn' : 'note';
@@ -308,15 +338,36 @@ async function ask(text){
     noteEl.className='note warn';
     noteEl.textContent = '请求出错：' + e.message;
   }finally{
-    btn.disabled = false;
+    btn.disabled = false; rbtn.disabled = false;
   }
 }
+
+/* ---------------------------------------------------------- 演示模式 */
+function applyDemo(on, banner){
+  $('#demoChk').checked = !!on;
+  $('#demoSwitch').classList.toggle('on', !!on);
+  const b = $('#banner');
+  b.style.display = on ? 'block' : 'none';
+  if (on) b.textContent = banner || '演示模式：以下数据是编的，没有联网。';
+}
+$('#demoChk').onchange = async e => {
+  const on = e.target.checked;
+  const r = await fetch('/api/demo', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({on})});
+  const d = await r.json();
+  applyDemo(d.demo, d.banner);
+  await loadStatus();
+  ask($('#q').value.trim() || '这周有什么安排');
+};
+$('#refreshBtn').onclick = () =>
+  ask($('#q').value.trim() || '这周有什么安排', {refresh:true});
 
 /* ---------------------------------------------------------- 状态 */
 async function loadStatus(){
   const s = await (await fetch('/api/status')).json();
   if(!s.has_token) $('#tokenCard').style.display='block';
   $('#inboxPath').textContent = s.inbox || '—';
+  applyDemo(s.demo, s.demo_banner);
 
   const c = s.calendar || {};
   const el = $('#calStatus');
@@ -341,6 +392,10 @@ function fmtTs(iso){
   const p = n => String(n).padStart(2,'0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} `
        + `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fmtClock(ms){
+  const d = new Date(ms), p = n => String(n).padStart(2,'0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /* ---------------------------------------------------------- 导入 */
@@ -433,6 +488,8 @@ $('#kindSeg').addEventListener('click', e => {
   [...$('#kindSeg').children].forEach(x => x.classList.toggle('on', x === b));
   const isDl = manualKind === 'deadline';
   $('#mEnd').style.display = isDl ? 'none' : '';
+  $('#mExtra').placeholder = isDl ? '课程名（可选）' : '地点（可选）';
+  $('#mExtra').value = '';
   $('#mHint').innerHTML = isDl
     ? '记作 <b>截止（deadline）</b>：只有一个时间点，就是「什么时候之前要交完」。'
     : '记作 <b>日程</b>：有起止时间，出席即可。结束时间可以留空。';
@@ -442,14 +499,21 @@ $('#mAdd').onclick = async () => {
   if(!title){ alert('先写个标题'); return; }
   const when = $('#mWhen').value;
   if(!when){ alert('选一个时间'); return; }
+  const extra = $('#mExtra').value.trim();
   const body = {kind: manualKind, title: title};
-  if(manualKind === 'deadline') body.due = when;
-  else { body.start = when; body.end = $('#mEnd').value || null; }
+  if(manualKind === 'deadline'){
+    body.due = when;
+    if(extra) body.course = extra;
+  }else{
+    body.start = when; body.end = $('#mEnd').value || null;
+    if(extra) body.location = extra;
+  }
   const r = await fetch('/api/manual', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const d = await r.json();
   if(!d.ok){ alert(d.error || '添加失败'); return; }
   $('#mTitle').value = ''; $('#mWhen').value = ''; $('#mEnd').value = '';
+  $('#mExtra').value = '';
   await loadStatus();
   const kindName = manualKind === 'deadline' ? '截止' : '日程';
   noteEl.className = 'note';

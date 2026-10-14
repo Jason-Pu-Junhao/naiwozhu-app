@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """本地数据仓库：交我办日程的导入快照 + 手动录入的条目。
 
-存两个文件（都在 app/data/ 下，不进 Git）：
+存三个文件（都在 app/data/ 下，不进 Git）：
 
     calendar.json   最近一次成功导入的交我办快照
     manual.json     网页/语音自行录入的条目
+    demo.json       只存演示模式的开关（演示条目本身每次现生成，见 demo.py）
 
 导入按**时间戳**判断新旧：文件里的 exported_at 不比已存的更新时直接跳过，
 所以重复拖同一个文件、或者拖了一个旧的备份，都不会把新数据覆盖掉。
@@ -21,6 +22,10 @@ import calendar_import
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DATA_DIR = os.path.join(HERE, "data")
 
+# 想换个地方存数据（比如放进 U 盘、或者测试用临时目录），设这个环境变量。
+# 测试靠它避免碰到你真实的日历和手动记录。
+ENV_DATA_DIR = "NAIWOZHU_DATA_DIR"
+
 
 def _now_iso():
     return datetime.now(timezone.utc).astimezone(CST).isoformat()
@@ -28,10 +33,13 @@ def _now_iso():
 
 class Store:
     def __init__(self, data_dir=None):
-        self.dir = data_dir or DEFAULT_DATA_DIR
+        # 数据目录三级覆盖：显式传参 > 环境变量 > 默认 app/data/
+        self.dir = (data_dir or os.environ.get(ENV_DATA_DIR)
+                    or DEFAULT_DATA_DIR)
         self.inbox = os.path.join(self.dir, "inbox")
         self.cal_path = os.path.join(self.dir, "calendar.json")
         self.manual_path = os.path.join(self.dir, "manual.json")
+        self.demo_path = os.path.join(self.dir, "demo.json")
         os.makedirs(self.inbox, exist_ok=True)
 
     # ------------------------------------------------------------ 读写
@@ -169,6 +177,19 @@ class Store:
                 pass
         return {"ok": True}
 
+    # ------------------------------------------------------------ 演示模式
+    def demo_on(self):
+        """演示模式开着吗。
+
+        只有这一个布尔标志落盘，演示条目本身每次现生成（见 demo.py），
+        所以演示数据不可能混进 calendar.json / manual.json。
+        """
+        return bool((self._read(self.demo_path) or {}).get("on"))
+
+    def set_demo(self, on):
+        self._write(self.demo_path, {"on": bool(on)})
+        return bool(on)
+
     # ------------------------------------------------------------ 手动录入
     def _manual_doc(self):
         doc = self._read(self.manual_path) or {}
@@ -180,11 +201,15 @@ class Store:
         return self._manual_doc()["items"]
 
     def add_manual(self, kind, title, *, due=None, start=None, end=None,
-                   all_day=False, location="", note=""):
+                   all_day=False, location="", course="", note=""):
         """手动加一条。
 
         kind 必须显式给出——这是这个项目的约定：
         自行录入的条目，类型由用户确认，不靠系统猜。
+
+        两个类型各自多出来的信息不一样，所以分开收：
+          deadline → ``course`` 课程名（``note`` 是老写法，仍然认）
+          日程     → ``location`` 地点、``note`` 备注
         """
         kind = (kind or "").strip()
         if kind not in KINDS:
@@ -203,7 +228,8 @@ class Store:
             if d is None:
                 raise ValueError("deadline 需要一个截止时间（due）")
             item = make_deadline(item_id, title, d, SRC_MANUAL,
-                                 course=note or "", sources=["手动录入"])
+                                 course=course or note or "",
+                                 sources=["手动录入"])
         else:
             s = parse_dt(start)
             if s is None:

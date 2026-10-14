@@ -175,20 +175,32 @@ def main():
         check("手动日程显示起止", s["when_local"] == "10-22 15:00–16:00",
               s["when_local"])
 
+        # 两类各自多出来的信息：截止带课程名，日程带地点
+        d2 = st.add_manual(model.KIND_DEADLINE, "线代第五章",
+                           due="2026-10-21T23:59", course="线性代数")
+        check("课程名可以用 course 传", d2["course"] == "线性代数", d2["course"])
+
+        s2 = st.add_manual(model.KIND_SCHEDULE, "班会",
+                           start="2026-10-23T18:00", end="2026-10-23T19:00",
+                           location="东中院1-101")
+        check("日程的地点写得进去", s2["location"] == "东中院1-101",
+              s2["location"])
+
         print("\n汇总与排序")
         allitems = st.all_items()
-        check("三种来源合在一起", len(allitems) == 3 + 2, f"实际 {len(allitems)}")
+        # 3 条来自交我办 + 4 条手动（d / d2 / s / s2）
+        check("三种来源合在一起", len(allitems) == 3 + 4, f"实际 {len(allitems)}")
         keys = [(i.get("due_at") or i.get("start_at")) for i in allitems]
         check("整体按时间顺序", keys == sorted(keys))
         only_dl = st.all_items(kind=model.KIND_DEADLINE)
         check("能按类型过滤（只剩 deadline）",
-              len(only_dl) == 1 and only_dl[0]["kind"] == model.KIND_DEADLINE)
+              len(only_dl) == 2 and only_dl[0]["kind"] == model.KIND_DEADLINE)
         only_sc = st.all_items(kind=model.KIND_SCHEDULE)
-        check("能按类型过滤（只剩日程）", len(only_sc) == 4)
+        check("能按类型过滤（只剩日程）", len(only_sc) == 5)
 
         print("\n删除手动条目")
         check("删得掉", st.delete_manual(d["id"])["ok"] is True)
-        check("删完只剩 1 条", len(st.manual_items()) == 1)
+        check("删完只剩 3 条", len(st.manual_items()) == 3)
         check("删不存在的报错", st.delete_manual("manual-999")["ok"] is False)
 
         print("\n坏文件")
