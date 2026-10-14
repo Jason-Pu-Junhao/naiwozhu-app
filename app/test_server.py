@@ -118,9 +118,10 @@ def main():
         code, s = resp.status_code, resp.get_json()
         check("/api/status 返回 200", code == 200, str(code))
         for k in ("demo", "demo_banner", "demo_count", "cache_ttl", "cache_age",
-                  "has_token", "kinds", "inbox"):
+                  "has_token", "kinds", "inbox", "configured"):
             check(f"status 里有 {k}", k in s, sorted(s.keys()))
         check("默认演示模式是关的", s["demo"] is False)
+        check("还没导入过交我办 → 未完成首次配置", s["configured"] is False)
         check("测试用的是临时数据目录", s["inbox"].startswith(_TMP), s["inbox"])
 
         print("\n演示模式")
@@ -206,6 +207,8 @@ def main():
         check("导入到 1 条", r["count"] == 1, r)
         check("状态里能看到导入时间",
               c.get("/api/status").get_json()["calendar"]["count"] == 1)
+        check("★导入后首次配置就算完成了",
+              c.get("/api/status").get_json()["configured"] is True)
 
         print("\nCanvas 缓存")
         c.post("/api/demo", json={"on": False})     # 先关掉演示模式
@@ -239,6 +242,27 @@ def main():
         check("窗口过滤：30 天后的假作业不在这周里",
               "假的远期报告" not in [i["title"] for i in
                                      q("这周有什么安排")[1]["items"]])
+
+        print("\n按标签页取数（不带文字，只给 kind / days）")
+        # 网页上「全部 / 日程 / ddl」三个按钮走的就是这条路径，
+        # 和"问一句话"是同一个接口，只是不带 text。
+        code, r = q("", kind=model.KIND_SCHEDULE)
+        check("只给 kind 也能查", code == 200 and r["ok"], r)
+        check("kind=日程 时只剩日程",
+              all(i["kind"] == model.KIND_SCHEDULE for i in r["items"]))
+        check("导入的那条日程出现在日程里",
+              any(i["title"] == "导入进来的测试日程" for i in r["items"]))
+
+        code, r = q("", kind=model.KIND_DEADLINE)
+        check("kind=deadline 时只剩截止",
+              all(i["kind"] == model.KIND_DEADLINE for i in r["items"]))
+        check("kind=deadline 会去拿 Canvas 数据",
+              any(i["id"] == "fake-1" for i in r["items"]))
+
+        code, r = q("", days=7)
+        check("只给时间窗也能查", code == 200 and r["ok"])
+        check("时间窗滤掉了 30 天后那条",
+              "假的远期报告" not in [i["title"] for i in r["items"]])
 
         print("\n否定句与听不出来的话")
         _, r = q("明天没什么要交的")

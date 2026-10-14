@@ -3,159 +3,216 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>奶我助 · 待办与日程</title>
+<title>奶我助</title>
 <style>
   :root{
-    --navy:#1B3A6B; --navy-d:#122747; --navy-l:#E8EEF7;
-    --orange:#E8792A; --orange-l:#FFF6EE; --green:#2E7D5B; --green-l:#E6F2EC;
-    --purple:#6B4EA8; --purple-l:#F1ECFA;
-    --red:#C0392B; --gray:#5A6472; --line:#D8DEE8; --bg:#F4F6FA;
+    --navy:#1B3A6B; --navy-l:#EDF2F9;
+    --purple:#6B4EA8;
+    --red:#C0392B; --orange:#D97706;
+    --ink:#15191F; --gray:#6B7480; --faint:#9AA2AE;
+    --line:#E8EBF0; --bg:#FFFFFF; --soft:#F6F8FB;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:#14181F;
-       font-family:"Noto Sans CJK SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;}
-  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 80px}
-  header{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
-  h1{font-size:24px;color:var(--navy);margin:0}
-  .sub{color:var(--gray);font-size:13px}
-  .demo-switch{margin-left:auto;display:inline-flex;align-items:center;gap:7px;
-               font-size:13px;color:var(--gray);cursor:pointer;user-select:none}
-  .demo-switch input{width:16px;height:16px;accent-color:var(--orange);cursor:pointer}
-  .demo-switch.on{color:var(--orange);font-weight:600}
-  .banner{background:var(--orange-l);border:1px solid #F0CFAF;color:#8A4B12;
-          border-radius:10px;padding:11px 14px;margin-top:14px;font-size:13px;
-          line-height:1.65}
-  .card{background:#fff;border:1px solid var(--line);border-radius:12px;
-        padding:18px 20px;margin-top:16px;box-shadow:0 1px 3px rgba(27,58,107,.05)}
-  .ask{display:flex;gap:10px}
-  .ask input{flex:1;font-size:16px;padding:12px 14px;border:1.5px solid var(--line);
-             border-radius:9px;outline:none;font-family:inherit}
-  .ask input:focus{border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-l)}
-  button{font-family:inherit;cursor:pointer}
-  .ask button{font-size:15px;font-weight:600;padding:12px 22px;border:0;border-radius:9px;
-              background:var(--navy);color:#fff}
-  .ask button:hover{background:var(--navy-d)}
-  .ask button.ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line);
-                    font-weight:600;padding:12px 16px}
-  .ask button.ghost:hover{background:var(--navy-l);border-color:var(--navy)}
-  .ask button:disabled{opacity:.5;cursor:default}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-  .chip{font-size:12.5px;padding:6px 12px;border-radius:20px;border:1px solid var(--line);
-        background:#fff;color:var(--gray)}
-  .chip:hover{border-color:var(--orange);color:var(--orange)}
-  .note{margin-top:12px;font-size:13px;color:var(--gray);min-height:18px}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;
+       line-height:1.6;-webkit-font-smoothing:antialiased;
+       font-family:"Noto Sans CJK SC","Microsoft YaHei",system-ui,-apple-system,sans-serif}
+  button{font-family:inherit;font-size:inherit;cursor:pointer;border:0;background:none;
+         color:inherit;padding:0}
+  input{font-family:inherit;font-size:inherit}
+
+  /* ---------- 顶栏 ---------- */
+  .top{position:sticky;top:0;z-index:5;background:var(--bg);
+       border-bottom:1px solid var(--line)}
+  .top-in{max-width:720px;margin:0 auto;padding:14px 24px;
+          display:flex;align-items:center;gap:18px}
+  .brand{font-size:17px;font-weight:700;color:var(--navy);letter-spacing:.02em}
+  .top-sp{flex:1}
+  .link{font-size:13.5px;color:var(--gray)}
+  .link:hover{color:var(--navy)}
+  .demo{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;
+        color:var(--gray);cursor:pointer;user-select:none}
+  .demo input{width:15px;height:15px;accent-color:var(--orange);cursor:pointer}
+  .demo.on{color:var(--orange);font-weight:600}
+
+  .wrap{max-width:720px;margin:0 auto;padding:0 24px 96px}
+  .banner{background:#FFF8EE;border-left:2px solid var(--orange);color:#8A5210;
+          padding:10px 14px;margin:18px 0 0;font-size:13px;line-height:1.65}
+
+  /* ---------- 搜索 ---------- */
+  .search{display:flex;gap:10px;margin:26px 0 0}
+  .search input{flex:1;padding:11px 14px;background:var(--soft);border:1px solid transparent;
+                border-radius:8px;outline:none}
+  .search input:focus{background:#fff;border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-l)}
+  .search .go{padding:11px 18px;border-radius:8px;background:var(--navy);color:#fff;
+              font-weight:600;font-size:14px}
+  .search .go:disabled{opacity:.45}
+  .search .ghost{padding:11px 14px;border-radius:8px;color:var(--gray);
+                 border:1px solid var(--line)}
+  .search .ghost:hover{color:var(--navy);border-color:var(--navy)}
+  .hints{margin:11px 0 0;font-size:12.5px;color:var(--faint);line-height:2}
+  .hints button{font-size:12.5px;color:var(--gray)}
+  .hints button:hover{color:var(--navy);text-decoration:underline}
+  .hints .sep{margin:0 7px;opacity:.45}
+
+  /* ---------- 标签页 ---------- */
+  .bar{display:flex;align-items:flex-end;gap:16px;margin:26px 0 0;
+       border-bottom:1px solid var(--line)}
+  .tabs{display:flex;gap:22px;flex:1}
+  .tabs button{font-size:14.5px;font-weight:600;color:var(--faint);
+               padding:0 0 11px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs button:hover{color:var(--gray)}
+  .tabs button.on{color:var(--navy);border-bottom-color:var(--navy)}
+  .bar .ghost{font-size:13.5px;color:var(--gray);padding:0 0 11px}
+  .bar .ghost:hover{color:var(--navy)}
+
+  .note{font-size:13px;color:var(--faint);margin:14px 0 0;min-height:20px}
   .note.warn{color:var(--orange)}
-  .list{margin-top:16px}
+  .note a{color:var(--navy)}
 
-  .item{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);
-        border-radius:10px;padding:14px 16px;margin-bottom:10px}
-  .item.overdue{border-left-color:var(--red);background:#FFF8F7}
-  .item.soon{border-left-color:var(--orange);background:var(--orange-l)}
-  .item.sched{border-left-color:var(--purple)}
-  .item.sched.overdue{border-left-color:var(--red)}
-  .row1{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-  .title{font-size:16px;font-weight:600;line-height:1.35}
-  .badge{font-size:12.5px;font-weight:600;white-space:nowrap;padding:3px 9px;border-radius:20px}
-  .b-ok{background:var(--green-l);color:var(--green)}
-  .b-soon{background:#FDEBDC;color:var(--orange)}
-  .b-over{background:#FBE4E1;color:var(--red)}
-  .kbadge{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:5px;
-          white-space:nowrap;margin-right:8px;vertical-align:1px}
-  .k-dl{background:var(--navy-l);color:var(--navy)}
-  .k-sc{background:var(--purple-l);color:var(--purple)}
-  .meta{margin-top:7px;font-size:12.5px;color:var(--gray);display:flex;
-        flex-wrap:wrap;gap:6px 14px}
-  .src{font-size:11.5px;color:#8A93A0}
-  .empty{text-align:center;padding:40px 20px;color:var(--gray)}
-  .empty b{display:block;font-size:17px;color:var(--navy);margin-bottom:8px}
-  .sect-title{font-size:14px;font-weight:700;color:var(--navy);
-              margin:0 0 12px;display:flex;align-items:center;gap:8px}
-  .sect-title::before{content:"";width:4px;height:15px;background:var(--orange);border-radius:2px}
-  .card + .card .sect-title{margin-top:0}
-  .hint{font-size:12.5px;color:var(--gray);line-height:1.75;margin-top:8px}
-  .hint code{background:var(--navy-l);padding:1px 6px;border-radius:4px;font-size:12px}
-  .hint b{color:#14181F}
-  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
-        border-top-color:var(--navy);border-radius:50%;animation:sp .7s linear infinite;
-        vertical-align:-2px;margin-right:6px}
-  @keyframes sp{to{transform:rotate(360deg)}}
+  /* ---------- 列表 ---------- */
+  .list{margin:6px 0 0}
+  .row{padding:15px 0;border-bottom:1px solid var(--line)}
+  .row:hover{background:#FCFDFF}
+  .row.over{background:#FFF9F8}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+  .title{font-size:15.5px;font-weight:600}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;
+       margin-right:9px;vertical-align:2px}
+  .dot.dl{background:var(--navy)}
+  .dot.sc{background:var(--purple)}
+  .badge{font-size:12.5px;white-space:nowrap;color:var(--faint)}
+  .badge.over{color:var(--red);font-weight:600}
+  .badge.soon{color:var(--orange)}
+  .meta{font-size:13px;color:var(--faint);margin-top:5px;padding-left:16px}
+  .meta a{color:var(--navy);text-decoration:none}
+  .meta a:hover{text-decoration:underline}
+  .meta .del{color:var(--faint);cursor:pointer}
+  .meta .del:hover{color:var(--red)}
+  .more{width:100%;text-align:center;padding:16px 0;font-size:13.5px;
+        color:var(--navy);font-weight:600}
+  .more:hover{background:var(--soft)}
+  .empty{padding:56px 0;text-align:center;color:var(--faint);font-size:14px}
+  .empty b{display:block;font-size:15.5px;font-weight:600;color:var(--ink);
+           margin-bottom:8px}
 
-  .drop{margin-top:12px;border:1.5px dashed var(--line);border-radius:10px;
-        padding:16px;text-align:center;font-size:13px;color:var(--gray);
-        background:#FBFCFE;transition:.15s}
-  .drop.hot{border-color:var(--orange);background:var(--orange-l);color:var(--orange)}
-  .minibtn{font-size:12.5px;padding:6px 12px;border-radius:7px;border:1px solid var(--line);
-           background:#fff;color:var(--navy);font-weight:600}
-  .minibtn:hover{border-color:var(--navy);background:var(--navy-l)}
-  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-  .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
-  .seg button{border:0;background:#fff;padding:9px 18px;font-size:13.5px;font-weight:600;
-              color:var(--gray)}
-  .seg button + button{border-left:1.5px solid var(--line)}
+  /* ---------- 添加 ---------- */
+  .addform{margin-top:18px;padding:18px;background:var(--soft);border-radius:10px}
+  .seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:8px;
+       overflow:hidden}
+  .seg button{padding:8px 16px;font-size:13.5px;font-weight:600;color:var(--gray)}
+  .seg button + button{border-left:1px solid var(--line)}
   .seg button.on{background:var(--navy);color:#fff}
-  .seg button.on[data-kind="日程"]{background:var(--purple)}
-  .mrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-  .mrow input{flex:1;min-width:150px;padding:10px 12px;border:1.5px solid var(--line);
-              border-radius:8px;font-family:inherit;font-size:14px;outline:none}
-  .mrow input:focus{border-color:var(--navy)}
-  .mrow button{padding:10px 20px;border:0;border-radius:8px;background:var(--navy);
-               color:#fff;font-weight:600;font-size:14px}
-  .codebox{margin-top:10px;width:100%;height:150px;font-family:ui-monospace,monospace;
-           font-size:11.5px;border:1.5px solid var(--line);border-radius:8px;padding:10px;
-           display:none;resize:vertical}
-  details{margin-top:10px;font-size:12.5px;color:var(--gray)}
+  .fields{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .fields input{flex:1;min-width:140px;padding:9px 12px;border:1px solid var(--line);
+                border-radius:7px;outline:none;background:#fff}
+  .fields input:focus{border-color:var(--navy)}
+  .fields .full{flex:1 1 100%}
+  .fields .primary{padding:9px 20px;border-radius:7px;background:var(--navy);color:#fff;
+                   font-weight:600;font-size:14px}
+  .tip{font-size:12.5px;color:var(--faint);margin-top:10px;line-height:1.7}
+  .tip b{color:var(--gray)}
+
+  /* ---------- 配置页 ---------- */
+  .setup-head{padding:52px 0 6px}
+  .setup-head h1{font-size:26px;margin:0 0 10px;color:var(--navy);letter-spacing:.01em}
+  .setup-head p{margin:0;color:var(--gray);font-size:14px;line-height:1.8}
+  .step{margin-top:38px;padding-top:26px;border-top:1px solid var(--line)}
+  .step:first-of-type{border-top:0;padding-top:20px}
+  .step-h{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+  .num{font-size:12px;font-weight:700;color:#fff;background:var(--navy);
+       width:20px;height:20px;border-radius:50%;display:inline-flex;
+       align-items:center;justify-content:center;flex:none}
+  .step-h h2{font-size:16px;margin:0;font-weight:700}
+  .req{font-size:12px;color:var(--orange);font-weight:600}
+  .opt{font-size:12px;color:var(--faint);font-weight:600}
+  .step p{margin:1px 0 0 30px;color:var(--gray);font-size:13.5px;line-height:1.8}
+
+  .drop{margin:14px 0 0 30px;border:1.5px dashed #CBD3DF;border-radius:10px;
+        padding:22px;text-align:center;font-size:13.5px;color:var(--gray);
+        background:#FBFCFE;transition:.15s}
+  .drop.hot{border-color:var(--orange);background:#FFF8EE;color:var(--orange)}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0 30px}
+  .minibtn{font-size:13px;padding:7px 13px;border-radius:7px;border:1px solid var(--line);
+           color:var(--navy);font-weight:600;background:#fff}
+  .minibtn:hover{border-color:var(--navy);background:var(--navy-l)}
+  .codebox{margin:10px 0 0 30px;width:calc(100% - 30px);height:140px;
+           font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+           border:1px solid var(--line);border-radius:8px;padding:10px}
+  details{margin:12px 0 0 30px;font-size:13px;color:var(--gray)}
   details summary{cursor:pointer;color:var(--navy);font-weight:600}
-  details ol{margin:8px 0 0;padding-left:20px;line-height:1.9}
-  footer{margin-top:30px;font-size:12px;color:#98A2B0;text-align:center}
-  footer a{color:#98A2B0}
+  details ol{margin:8px 0 0;padding-left:20px;line-height:2}
+  details code,.step code{background:var(--navy-l);padding:1px 6px;border-radius:4px;
+                          font-size:12.5px;word-break:break-all}
+  .status{margin:12px 0 0 30px;font-size:13px;color:var(--gray)}
+  .status b{color:var(--ink)}
+  .status.ok{color:#2E7D5B}
+  .tk{display:flex;gap:8px;margin:12px 0 0 30px}
+  .tk input{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:7px;outline:none}
+  .tk input:focus{border-color:var(--navy)}
+  .tk button{padding:9px 18px;border-radius:7px;background:var(--navy);color:#fff;
+             font-weight:600;font-size:14px}
+  .tk button:disabled{opacity:.5}
+  .start{margin:44px 0 0 30px}
+  .start button{padding:13px 34px;border-radius:9px;background:var(--navy);color:#fff;
+                font-size:15px;font-weight:600}
+  .start button:hover{background:#122747}
+  .start button:disabled{background:#C7CFDB;cursor:default}
+  .start span{display:block;margin-top:10px;font-size:13px;color:var(--faint)}
+
+  footer{max-width:720px;margin:0 auto;padding:0 24px 60px;
+         font-size:12px;color:#B4BBC5}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>奶我助</h1>
-    <span class="sub">待交作业 + 日程 · 本地网页版</span>
-    <label class="demo-switch" id="demoSwitch" title="打开后不联网，用编好的数据演示">
-      <input type="checkbox" id="demoChk">
-      <span>演示数据</span>
+
+<!-- ============================================================ 顶栏 -->
+<div class="top">
+  <div class="top-in">
+    <span class="brand">奶我助</span>
+    <span class="top-sp"></span>
+    <label class="demo" id="demoWrap" title="打开后不联网，用编好的数据演示">
+      <input type="checkbox" id="demoChk"><span>演示数据</span>
     </label>
-  </header>
+    <button class="link" id="settingsBtn">设置</button>
+  </div>
+</div>
 
-  <div class="banner" id="banner" style="display:none"></div>
-
-  <!-- 令牌未配置时显示 -->
-  <div class="card" id="tokenCard" style="display:none">
-    <div class="sect-title">配置 Canvas 访问令牌（只需要一次）</div>
-    <div class="hint">
-      1. 登录 <code>oc.sjtu.edu.cn</code> → 左上角头像 → <b>设置</b><br>
-      2. 拉到页面最底部 <b>已批准的访问许可</b> → <b>+ 新建访问许可证</b><br>
-      3. 用途随便填（如 <code>naiwozhu</code>）→ 生成 → <b>立刻复制</b>（关掉弹窗就看不到了）<br>
-      令牌只保存在你自己电脑上，不会上传到任何服务器。这一项只影响作业（截止），
-      不配也能用日程。
-    </div>
-    <div class="mrow">
-      <input id="tokenInput" type="password" placeholder="粘贴访问令牌…">
-      <button id="tokenBtn">验证并保存</button>
-    </div>
+<!-- ============================================================ 配置页 -->
+<div class="wrap" id="setupView">
+  <div class="setup-head">
+    <h1 id="setupTitle">先把数据来源接上</h1>
+    <p id="setupLead">
+      交我办日历和 Canvas 是两套互不相通的系统，这个 app 取它们的方式也不一样。
+      第 1 步是必须的，第 2 步选填。
+    </p>
   </div>
 
-  <!-- 交我办日历导入 -->
-  <div class="card">
-    <div class="sect-title">交我办日程</div>
-    <div class="hint" id="calStatus">正在读取状态…</div>
+  <!-- ① 交我办 -->
+  <div class="step">
+    <div class="step-h">
+      <span class="num">1</span>
+      <h2>交我办日历</h2>
+      <span class="req">必需</span>
+    </div>
+    <p>
+      课表、活动、讲座这些安排都在交我办里。它<b>没有对外的公开接口</b>，
+      程序自己读不到，所以靠你在已登录的浏览器页面上跑一段脚本，
+      把数据导出成一个 JSON 文件。把那个文件拖到下面就行。
+    </p>
 
     <div class="drop" id="drop">
       把导出脚本生成的 <b>JSON</b> 拖到这里，或
       <button class="minibtn" id="pickBtn" style="margin-left:4px">选择文件</button>
       <input type="file" id="fileInput" accept=".json,application/json" hidden>
-      <div style="margin-top:8px;font-size:12px" id="dropName"></div>
+      <div style="margin-top:8px;font-size:12.5px" id="dropName"></div>
     </div>
 
     <div class="btnrow">
       <button class="minibtn" id="copyScript">复制导出脚本</button>
       <button class="minibtn" id="scanBtn">从收件箱导入</button>
     </div>
-    <textarea class="codebox" id="codeBox" readonly></textarea>
+    <textarea class="codebox" id="codeBox" readonly hidden></textarea>
 
     <details>
       <summary>怎么拿到这个 JSON 文件？（三步）</summary>
@@ -164,227 +221,123 @@
         <li>在这张页面上按 <b>F12</b> → <b>Console</b>，粘贴刚复制的脚本，回车</li>
         <li>会下载一个 <code>sjtu-calendar-&lt;时间戳&gt;.json</code>，拖到上面的虚线框里</li>
       </ol>
-      <div style="margin-top:6px">
+      <div style="margin-top:8px;line-height:1.8">
         脚本在<b>你自己的页面里</b>运行，借你已经登录的会话读数据。
         它不登录、不读 cookie、不保存密码，也不把数据发给任何第三方。<br>
-        也可以把下载好的文件放进收件箱目录，再点「从收件箱导入」：
+        也可以把下载好的文件放进收件箱，再点「从收件箱导入」：<br>
         <code id="inboxPath">…</code>
       </div>
     </details>
+
+    <div class="status" id="calStatus">正在读取状态…</div>
   </div>
 
-  <!-- 手动录入 -->
-  <div class="card">
-    <div class="sect-title">手动添加</div>
+  <!-- ② Canvas -->
+  <div class="step">
+    <div class="step-h">
+      <span class="num">2</span>
+      <h2>Canvas 访问令牌</h2>
+      <span class="opt">选填 · 填了才能看到作业截止</span>
+    </div>
+    <p>
+      作业和截止在 <code>oc.sjtu.edu.cn</code> 上。它有公开接口，生成一个访问令牌就能读。
+      不填也能用，只是「ddl」那一格一直是空的。
+    </p>
+
+    <div class="btnrow" id="tokenSteps">
+      <span class="tip" style="margin:0">
+        1. 登录 <code>oc.sjtu.edu.cn</code> → 左上角头像 → <b>设置</b><br>
+        2. 拉到页面最底部「<b>已批准的访问许可</b>」→「<b>+ 新建访问许可证</b>」<br>
+        3. 用途随便填（如 <code>naiwozhu</code>）→ 生成 → <b>立刻复制</b>（关掉弹窗就看不到了）
+      </span>
+    </div>
+    <div class="tk" id="tokenRow">
+      <input id="tokenInput" type="password" placeholder="粘贴访问令牌…">
+      <button id="tokenBtn">验证并保存</button>
+    </div>
+    <div class="status" id="tokenStatus"></div>
+  </div>
+
+  <div class="start">
+    <button id="startBtn" disabled>进入 →</button>
+    <span id="startHint">需要先导入一份交我办日历 JSON</span>
+  </div>
+</div>
+
+<!-- ============================================================ 主界面 -->
+<div class="wrap" id="mainView" hidden>
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="search">
+    <input id="q" placeholder="问一句，比如：我还有哪些作业没交" autocomplete="off">
+    <button class="go" id="askBtn">查询</button>
+    <button class="ghost" id="clearBtn" hidden>清除</button>
+    <button class="ghost" id="refreshBtn" title="跳过缓存，重新从 Canvas 取一次">刷新</button>
+  </div>
+
+  <div class="hints" id="hints">
+    可以问：
+    <button>我还有哪些作业没交</button><span class="sep">·</span>
+    <button>明天有什么要交的</button><span class="sep">·</span>
+    <button>这周还有什么没交</button><span class="sep">·</span>
+    <button>我明天有什么日程</button><span class="sep">·</span>
+    <button>这周有什么安排</button>
+  </div>
+
+  <div class="bar">
+    <nav class="tabs" id="tabs">
+      <button data-tab="all" class="on">全部</button>
+      <button data-tab="日程">日程</button>
+      <button data-tab="deadline">ddl</button>
+    </nav>
+    <button class="ghost" id="addToggle">+ 添加</button>
+  </div>
+
+  <div class="note" id="note"></div>
+
+  <div class="addform" id="addForm" hidden>
     <div class="seg" id="kindSeg">
-      <button data-kind="deadline" class="on">截止 deadline</button>
+      <button data-kind="deadline" class="on">截止</button>
       <button data-kind="日程">日程</button>
     </div>
-    <div class="mrow">
-      <input id="mTitle" placeholder="标题，比如「高数第三章作业」" autocomplete="off">
+    <div class="fields">
+      <input id="mTitle" class="full" placeholder="标题，比如「高数第三章作业」" autocomplete="off">
       <input id="mWhen" type="datetime-local">
-      <input id="mEnd" type="datetime-local" style="display:none">
+      <input id="mEnd" type="datetime-local" hidden>
       <input id="mExtra" placeholder="课程名（可选）" autocomplete="off">
-      <button id="mAdd">添加</button>
+      <button class="primary" id="mAdd">添加</button>
     </div>
-    <div class="hint" id="mHint">
-      自行录入的条目必须自己说明是哪种：<b>截止</b>只有一个时间点，<b>日程</b>有起止时间。
-    </div>
-  </div>
-
-  <!-- 查询区 -->
-  <div class="card">
-    <div class="ask">
-      <input id="q" placeholder="问一句，比如：我还有哪些作业没交" autocomplete="off">
-      <button id="askBtn">查询</button>
-      <button id="refreshBtn" class="ghost" title="跳过缓存，重新从 Canvas 取一次">刷新</button>
-    </div>
-    <div class="chips">
-      <span class="chip">我还有哪些作业没交</span>
-      <span class="chip">明天有什么要交的</span>
-      <span class="chip">这周还有什么没交</span>
-      <span class="chip">我明天有什么日程</span>
-      <span class="chip">这周有什么安排</span>
-    </div>
-    <div class="note" id="note"></div>
+    <div class="tip" id="mHint"></div>
   </div>
 
   <div class="list" id="list"></div>
-
-  <footer>
-    只监听本机 127.0.0.1，令牌不出你的电脑 ·
-    <a href="#" id="redo">重新配置令牌</a>
-  </footer>
 </div>
+
+<footer>只监听本机 127.0.0.1，令牌不出你的电脑</footer>
 
 <script>
 const $ = s => document.querySelector(s);
-const listEl = $('#list'), noteEl = $('#note');
+const listEl = $('#list'), noteEl = $('#note'), PAGE = 10;
+
+const state = {
+  tab: 'all',        // 'all' | '日程' | 'deadline'
+  days: null,
+  course_kw: null,
+  items: [],
+  expanded: false,
+  activeQuery: false,
+  hasData: false,    // 交我办 JSON 是否已导入过
+};
 let manualKind = 'deadline';
+
+// 允许用 ?tab=日程 直接停在某一格，方便存书签
+{
+  const t = new URLSearchParams(location.search).get('tab');
+  if (['all', '日程', 'deadline'].includes(t)) state.tab = t;
+}
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,
   c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-
-/* ---------------------------------------------------------- 渲染条目 */
-function kindBadge(it){
-  return it.kind === 'deadline'
-    ? `<span class="kbadge k-dl">截止</span>`
-    : `<span class="kbadge k-sc">日程</span>`;
-}
-function badge(it){
-  if (it.overdue) return `<span class="badge b-over">${it.kind==='deadline'?'已过期':'已结束'}</span>`;
-  const t = it.remaining || '—';
-  const hot = /小时|分钟|进行中/.test(t);
-  return `<span class="badge ${hot?'b-soon':'b-ok'}">${esc(t)}</span>`;
-}
-function itemClass(it){
-  const c = [];
-  if (it.kind === '日程') c.push('sched');
-  if (it.overdue) c.push('overdue');
-  else if (/小时|分钟/.test(it.remaining||'')) c.push('soon');
-  return c.join(' ');
-}
-function card(it){
-  const isDl = it.kind === 'deadline';
-  const link = it.html_url
-    ? `<span><a href="${esc(it.html_url)}" target="_blank" rel="noreferrer">打开</a></span>` : '';
-  const lines = isDl
-    ? `<span>截止 ${esc(it.due_local)}</span>
-       ${it.course?`<span>${esc(it.course)}</span>`:''}`
-    : `<span>${esc(it.when_local)}</span>
-       ${it.location?`<span>📍 ${esc(it.location)}</span>`:''}
-       ${it.calendar?`<span>${esc(it.calendar)}</span>`:''}`;
-  const del = String(it.id||'').startsWith('manual-')
-    ? `<span><a href="#" data-del="${esc(it.id)}" style="color:#98A2B0">删除</a></span>` : '';
-  return `<div class="item ${itemClass(it)}">
-    <div class="row1">
-      <div class="title">${kindBadge(it)}${esc(it.title)}</div>
-      ${badge(it)}
-    </div>
-    <div class="meta">
-      ${lines}${link}${del}
-      <span class="src">来源：${esc(it.source||'')}</span>
-    </div>
-  </div>`;
-}
-function renderItems(items){
-  if(!items.length){
-    // 这里刻意用 <strong>：.empty b 被定义成了 display:block 的大字标题，
-    // 提示语里的强调要是也用 <b>，会被撑成独立一行的大字。
-    listEl.innerHTML = `<div class="empty"><b>没有找到符合条件的条目</b>
-      可以试试放宽时间范围（比如问“这周有什么安排”）<br>
-      <span style="font-size:13px">想看页面满起来是什么样，打开顶部的
-      <strong style="color:var(--navy)">演示数据</strong>开关。</span></div>`;
-    return;
-  }
-  listEl.innerHTML = items.map(card).join('');
-}
-listEl.addEventListener('click', async e => {
-  const a = e.target.closest('a[data-del]');
-  if(!a) return;
-  e.preventDefault();
-  if(!confirm('删掉这条手动录入的记录？')) return;
-  const r = await fetch('/api/manual/' + encodeURIComponent(a.dataset.del), {method:'DELETE'});
-  const d = await r.json();
-  if(!d.ok) alert(d.error || '删除失败');
-  ask($('#q').value.trim() || '这周有什么安排');
-});
-
-/* ---------------------------------------------------------- 查询 */
-async function ask(text, opts){
-  opts = opts || {};
-  const btn = $('#askBtn'), rbtn = $('#refreshBtn');
-  btn.disabled = true; rbtn.disabled = true;
-  noteEl.className = 'note';
-  noteEl.innerHTML = `<span class="spin"></span>` +
-    (opts.refresh ? '正在重新取数据…' : '正在查询…');
-  listEl.innerHTML = '';
-  try{
-    const r = await fetch('/api/query', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({text, refresh: !!opts.refresh})
-    });
-    const d = await r.json();
-    if(!r.ok){
-      noteEl.className='note warn';
-      noteEl.textContent = d.error || '查询失败';
-      return;
-    }
-    if(d.parsed && !d.parsed.is_query){
-      noteEl.className='note warn';
-      noteEl.innerHTML = `${esc(d.note||'这句我没当成查询')}<br>
-        <span style="font-size:12px">${esc(d.help||'').replace(/\n/g,'<br>')}</span>`;
-      listEl.innerHTML = `<div class="empty">这句我按陈述处理了，没有去查数据。<br>
-        如果确实想查，可以问“<b>明天有什么要交的</b>”</div>`;
-      return;
-    }
-    applyDemo(d.demo, d.demo_banner);
-    const bits = [];
-    if (d.count) {
-      const dl = (d.items||[]).filter(i=>i.kind==='deadline').length;
-      const sc = (d.items||[]).length - dl;
-      bits.push(`共 ${d.count} 项` + (dl&&sc ? `（截止 ${dl} · 日程 ${sc}）` : ''));
-    }
-    if (d.demo) {
-      bits.push('演示数据');
-    } else if (d.cache_age != null) {
-      bits.push(`Canvas 数据更新于 ${fmtClock(Date.now() - d.cache_age*1000)}`);
-    }
-    if (d.warning) bits.push(`⚠ ${d.warning}`);
-    noteEl.className = d.warning ? 'note warn' : 'note';
-    noteEl.textContent = bits.join('　');
-    renderItems(d.items||[]);
-  }catch(e){
-    noteEl.className='note warn';
-    noteEl.textContent = '请求出错：' + e.message;
-  }finally{
-    btn.disabled = false; rbtn.disabled = false;
-  }
-}
-
-/* ---------------------------------------------------------- 演示模式 */
-function applyDemo(on, banner){
-  $('#demoChk').checked = !!on;
-  $('#demoSwitch').classList.toggle('on', !!on);
-  const b = $('#banner');
-  b.style.display = on ? 'block' : 'none';
-  if (on) b.textContent = banner || '演示模式：以下数据是编的，没有联网。';
-}
-$('#demoChk').onchange = async e => {
-  const on = e.target.checked;
-  const r = await fetch('/api/demo', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({on})});
-  const d = await r.json();
-  applyDemo(d.demo, d.banner);
-  await loadStatus();
-  ask($('#q').value.trim() || '这周有什么安排');
-};
-$('#refreshBtn').onclick = () =>
-  ask($('#q').value.trim() || '这周有什么安排', {refresh:true});
-
-/* ---------------------------------------------------------- 状态 */
-async function loadStatus(){
-  const s = await (await fetch('/api/status')).json();
-  if(!s.has_token) $('#tokenCard').style.display='block';
-  $('#inboxPath').textContent = s.inbox || '—';
-  applyDemo(s.demo, s.demo_banner);
-
-  const c = s.calendar || {};
-  const el = $('#calStatus');
-  if (c.count) {
-    el.innerHTML = `已导入 <b>${c.count}</b> 条日程，数据时间 ` +
-      `<b>${esc(fmtTs(c.exported_at))}</b>` +
-      (c.filename ? `（${esc(c.filename)}）` : '') +
-      `，导入于 ${esc(fmtTs(c.imported_at))}。`;
-  } else {
-    el.innerHTML = `还没有导入交我办日程。下面是三步说明；` +
-      `也可以把文件放进收件箱后点「从收件箱导入」。`;
-  }
-  if (s.manual_count) {
-    el.innerHTML += `<br>另有手动录入 ${s.manual_count} 条。`;
-  }
-  return s;
-}
 function fmtTs(iso){
   if(!iso) return '—';
   const d = new Date(iso);
@@ -398,41 +351,345 @@ function fmtClock(ms){
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/* ---------------------------------------------------------- 导入 */
-async function importPayload(payload, filename){
-  noteEl.className='note';
-  noteEl.innerHTML = `<span class="spin"></span>正在导入…`;
-  const r = await fetch('/api/import', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({payload, filename})
-  });
+/* ============================================================ 视图切换 */
+function showView(name){
+  const setup = name === 'setup';
+  $('#setupView').hidden = !setup;
+  $('#mainView').hidden = setup;
+  $('#settingsBtn').hidden = setup;
+  window.scrollTo(0, 0);
+  if (setup) loadStatus();
+  else loadList();
+}
+
+/* ============================================================ 演示模式 */
+function applyDemo(on, banner){
+  $('#demoChk').checked = !!on;
+  $('#demoWrap').classList.toggle('on', !!on);
+  const b = $('#banner');
+  b.hidden = !on;
+  if (on) b.textContent = banner || '演示模式：以下数据是编的，没有联网。';
+}
+$('#demoChk').onchange = async e => {
+  const r = await fetch('/api/demo', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({on: e.target.checked})});
   const d = await r.json();
-  if(!d.ok){
-    noteEl.className='note warn';
-    noteEl.textContent = '导入失败：' + (d.error||'未知错误');
+  applyDemo(d.demo, d.banner);
+  await loadStatus();
+  if (!$('#mainView').hidden) loadList();
+  else checkReady();
+};
+
+/* ============================================================ 状态 */
+async function loadStatus(){
+  const s = await (await fetch('/api/status')).json();
+  state.hasData = !!s.configured;
+  applyDemo(s.demo, s.demo_banner);
+  $('#inboxPath').textContent = s.inbox || '—';
+
+  const c = s.calendar || {};
+  const el = $('#calStatus');
+  if (c.count) {
+    el.className = 'status ok';
+    el.innerHTML = `✅ 已导入 <b>${c.count}</b> 条日程，数据时间 `
+      + `<b>${esc(fmtTs(c.exported_at))}</b>`
+      + (c.filename ? `（${esc(c.filename)}）` : '')
+      + `，导入于 ${esc(fmtTs(c.imported_at))}。`;
+    if (s.manual_count) el.innerHTML += `另有手动录入 ${s.manual_count} 条。`;
+  } else {
+    el.className = 'status';
+    el.innerHTML = `还没有导入交我办日程。`;
+  }
+
+  const ts = $('#tokenStatus');
+  if (s.has_token) {
+    ts.className = 'status ok';
+    ts.innerHTML = `✅ 已配置（来源：${esc(s.token_source)}）。`
+      + ` <a href="#" id="redoToken">更换</a>`;
+    $('#tokenRow').hidden = true;
+    $('#redoToken').onclick = e => { e.preventDefault(); $('#tokenRow').hidden = false; };
+  } else {
+    ts.className = 'status';
+    ts.textContent = '还没有配置。不填也能用，只是看不到作业截止。';
+    $('#tokenRow').hidden = false;
+  }
+
+  checkReady();
+  return s;
+}
+
+function checkReady(){
+  const ready = state.hasData || $('#demoChk').checked;
+  $('#startBtn').disabled = !ready;
+  $('#startHint').textContent = ready
+    ? ($('#demoChk').checked && !state.hasData
+        ? '演示模式已打开，可以直接进去看'
+        : '交我办日历已接上，可以进去了')
+    : '需要先导入一份交我办日历 JSON';
+}
+
+/* ============================================================ 列表 */
+function badge(it){
+  if (it.overdue) return `<span class="badge over">${it.kind==='deadline'?'已过期':'已结束'}</span>`;
+  const t = it.remaining || '';
+  const hot = /小时|分钟|进行中/.test(t);
+  return `<span class="badge ${hot?'soon':''}">${esc(t || '—')}</span>`;
+}
+function row(it){
+  const isDl = it.kind === 'deadline';
+  const dot = `<span class="dot ${isDl?'dl':'sc'}"></span>`;
+  const bits = [];
+  if (isDl) {
+    bits.push('截止 ' + esc(it.due_local));
+    if (it.course) bits.push(esc(it.course));
+  } else {
+    bits.push(esc(it.when_local));
+    if (it.location) bits.push(esc(it.location));
+    if (it.calendar) bits.push(esc(it.calendar));
+  }
+  if (it.html_url) bits.push(`<a href="${esc(it.html_url)}" target="_blank" rel="noreferrer">打开</a>`);
+  if (String(it.id||'').startsWith('manual-'))
+    bits.push(`<span class="del" data-del="${esc(it.id)}">删除</span>`);
+  bits.push(`<span style="opacity:.75">${esc(it.source||'')}</span>`);
+  return `<div class="row ${it.overdue?'over':''}">
+    <div class="head">
+      <div class="title">${dot}${esc(it.title)}</div>
+      ${badge(it)}
+    </div>
+    <div class="meta">${bits.join(' · ')}</div>
+  </div>`;
+}
+function renderList(){
+  const all = state.items || [];
+  if (!all.length) {
+    // 用 <strong>：.empty b 是 display:block 的大字标题，这里要的是行内强调
+    listEl.innerHTML = `<div class="empty"><b>这一格是空的</b>
+      换个标签页看看，或者点右上角「+ 添加」记一条。<br>
+      <span style="font-size:13px">如果想要有数据可以看，打开顶部的
+      <strong style="color:var(--navy)">演示数据</strong>开关。</span></div>`;
     return;
   }
+  const shown = state.expanded ? all : all.slice(0, PAGE);
+  let html = shown.map(row).join('');
+  if (!state.expanded && all.length > PAGE) {
+    html += `<button class="more" id="moreBtn">展开全部（还有 ${all.length - PAGE} 项）</button>`;
+  } else if (state.expanded && all.length > PAGE) {
+    html += `<button class="more" id="moreBtn">收起</button>`;
+  }
+  listEl.innerHTML = html;
+  const m = $('#moreBtn');
+  if (m) m.onclick = () => { state.expanded = !state.expanded; renderList(); };
+}
+
+listEl.addEventListener('click', async e => {
+  const a = e.target.closest('[data-del]');
+  if (!a) return;
+  e.preventDefault();
+  if (!confirm('删掉这条手动记录？')) return;
+  const r = await fetch('/api/manual/' + encodeURIComponent(a.dataset.del), {method:'DELETE'});
+  const d = await r.json();
+  if (!d.ok) alert(d.error || '删除失败');
+  loadList();
+});
+
+/* ============================================================ 取数 */
+function noteFor(d, extra){
+  const bits = [];
+  const dl = (d.items||[]).filter(i=>i.kind==='deadline').length;
+  const sc = (d.items||[]).length - dl;
+  bits.push(`共 ${d.count} 项` + (dl&&sc ? `（日程 ${sc} · ddl ${dl}）` : ''));
+  bits.push(extra);
+  if (d.demo) bits.push('演示数据');
+  else if (d.cache_age != null) bits.push(`Canvas 数据更新于 ${fmtClock(Date.now() - d.cache_age*1000)}`);
+  if (d.warning) bits.push(`⚠ ${d.warning}`);
+  return {text: bits.filter(Boolean).join('　'), warn: !!d.warning};
+}
+
+async function loadList(opts){
+  opts = opts || {};
+  const body = {};
+  if (opts.text) {
+    body.text = opts.text;
+  } else {
+    if (state.tab !== 'all') body.kind = state.tab;
+    if (state.days != null) body.days = state.days;
+    if (state.course_kw) body.course_kw = state.course_kw;
+  }
+  if (opts.refresh) body.refresh = true;
+
+  noteEl.className = 'note';
+  noteEl.innerHTML = '正在取数据…';
+  listEl.innerHTML = '';
+  try{
+    const r = await fetch('/api/query', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!r.ok) {
+      noteEl.className = 'note warn';
+      noteEl.textContent = d.error || '查询失败';
+      return;
+    }
+    applyDemo(d.demo, d.demo_banner);
+
+    // 一句话问出来的，把标签页和窗口同步过来，让下面的按钮和结果对得上
+    if (d.parsed) {
+      if (!d.parsed.is_query) {
+        noteEl.className = 'note warn';
+        noteEl.innerHTML = esc(d.note || '这句我没当成查询') +
+          `<br><span style="font-size:12.5px">` +
+          esc(d.help||'').replace(/\n/g,'<br>') + `</span>`;
+        state.items = []; state.expanded = false;
+        listEl.innerHTML = `<div class="empty"><b>这句我按陈述处理了</b>
+          没有去查数据。如果确实想查，可以问「明天有什么要交的」。</div>`;
+        return;
+      }
+      state.tab = d.parsed.want_kind || 'all';
+      state.days = d.parsed.days;
+      state.course_kw = d.parsed.course_kw;
+      state.activeQuery = true;
+      syncTabs();
+    }
+
+    state.items = d.items || [];
+    state.expanded = false;
+
+    const extra = [];
+    if (state.course_kw) extra.push(`课程「${state.course_kw}」`);
+    if (state.days != null) {
+      const w = {1:'今天',2:'明天',3:'后天',7:'这周',14:'下周',31:'一个月'}[state.days];
+      extra.push(w ? w : `${state.days} 天内`);
+    }
+    const n = noteFor(d, extra.join(' · '));
+    noteEl.className = n.warn ? 'note warn' : 'note';
+    noteEl.textContent = n.text;
+
+    $('#clearBtn').hidden = !state.activeQuery;
+    renderList();
+  }catch(e){
+    noteEl.className = 'note warn';
+    noteEl.textContent = '请求出错：' + e.message;
+  }
+}
+
+/* ============================================================ 标签页 */
+function syncTabs(){
+  [...$('#tabs').children].forEach(b =>
+    b.classList.toggle('on', b.dataset.tab === state.tab));
+}
+$('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]');
+  if (!b) return;
+  state.tab = b.dataset.tab;
+  state.days = null;
+  state.course_kw = null;
+  state.activeQuery = false;
+  syncTabs();
+  $('#q').value = '';
+  loadList();
+});
+$('#askBtn').onclick = () => {
+  const t = $('#q').value.trim();
+  if (t) loadList({text: t});
+};
+$('#q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const t = $('#q').value.trim(); if (t) loadList({text: t}); }
+});
+$('#clearBtn').onclick = () => {
+  state.activeQuery = false;
+  state.days = null;
+  state.course_kw = null;
+  $('#q').value = '';
+  $('#clearBtn').hidden = true;
+  loadList();
+};
+$('#hints').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  $('#q').value = b.textContent.trim();
+  loadList({text: $('#q').value});
+});
+$('#refreshBtn').onclick = () => {
+  const t = $('#q').value.trim();
+  loadList(t ? {text: t, refresh: true} : {refresh: true});
+};
+
+/* ============================================================ 添加 */
+$('#addToggle').onclick = () => {
+  const f = $('#addForm');
+  f.hidden = !f.hidden;
+  $('#addToggle').textContent = f.hidden ? '+ 添加' : '收起';
+  if (!f.hidden) $('#mTitle').focus();
+};
+$('#kindSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-kind]');
+  if (!b) return;
+  manualKind = b.dataset.kind;
+  [...$('#kindSeg').children].forEach(x => x.classList.toggle('on', x === b));
+  const isDl = manualKind === 'deadline';
+  $('#mEnd').hidden = isDl;
+  $('#mExtra').placeholder = isDl ? '课程名（可选）' : '地点（可选）';
+  $('#mExtra').value = '';
+  $('#mHint').innerHTML = isDl
+    ? '记作 <b>截止</b>：只有一个时间点，就是「什么时候之前要交完」。'
+    : '记作 <b>日程</b>：有起止时间，出席即可。结束时间可以留空。';
+});
+$('#mHint').innerHTML = '记作 <b>截止</b>：只有一个时间点，就是「什么时候之前要交完」。';
+$('#mAdd').onclick = async () => {
+  const title = $('#mTitle').value.trim();
+  if (!title) { alert('先写个标题'); return; }
+  const when = $('#mWhen').value;
+  if (!when) { alert('选一个时间'); return; }
+  const extra = $('#mExtra').value.trim();
+  const body = {kind: manualKind, title: title};
+  if (manualKind === 'deadline') {
+    body.due = when;
+    if (extra) body.course = extra;
+  } else {
+    body.start = when; body.end = $('#mEnd').value || null;
+    if (extra) body.location = extra;
+  }
+  const r = await fetch('/api/manual', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || '添加失败'); return; }
+  ['#mTitle','#mWhen','#mEnd','#mExtra'].forEach(s => { $(s).value = ''; });
+  const kind = manualKind === 'deadline' ? '截止' : '日程';
+  const rightTab = manualKind === 'deadline' ? 'deadline' : '日程';
+  state.tab = rightTab; state.days = null; state.course_kw = null;
+  state.activeQuery = false; syncTabs();
+  await loadList();
+  noteEl.textContent = `✅ 已记作「${kind}」：${title}　${noteEl.textContent}`;
+};
+
+/* ============================================================ 导入 */
+async function importPayload(payload, filename){
+  noteEl.className = 'note';
+  noteEl.textContent = '正在导入…';
+  const r = await fetch('/api/import', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({payload, filename})});
+  const d = await r.json();
+  if (!d.ok) { alert('导入失败：' + (d.error || '未知错误')); return; }
   await loadStatus();
   const skipped = ((d.stats||{}).skipped||[]).length;
-  noteEl.className = 'note';
-  noteEl.textContent = (d.stale ? '⏭ ' : '✅ ') + (d.message || '导入完成')
-    + (skipped ? `；有 ${skipped} 条没有时间字段，已跳过` : '');
+  alert((d.stale ? '⏭ ' : '✅ ') + (d.message || '导入完成')
+    + (skipped ? `；有 ${skipped} 条没有时间字段，已跳过` : ''));
+  if (!$('#mainView').hidden) loadList();
 }
 async function readAndImport(file){
   $('#dropName').textContent = file.name;
   try{
-    const text = await file.text();
-    const payload = JSON.parse(text);
+    const payload = JSON.parse(await file.text());
     await importPayload(payload, file.name);
   }catch(e){
-    noteEl.className='note warn';
-    noteEl.textContent = '这个文件读不出来：' + e.message;
+    alert('这个文件读不出来：' + e.message);
   }
 }
 const drop = $('#drop');
 $('#pickBtn').onclick = () => $('#fileInput').click();
-drop.onclick = e => { if(e.target === drop) $('#fileInput').click(); };
-$('#fileInput').onchange = e => { if(e.target.files[0]) readAndImport(e.target.files[0]); };
+drop.onclick = e => { if (e.target === drop) $('#fileInput').click(); };
+$('#fileInput').onchange = e => { if (e.target.files[0]) readAndImport(e.target.files[0]); };
 ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {
   e.preventDefault(); drop.classList.add('hot');
 }));
@@ -441,119 +698,63 @@ $('#fileInput').onchange = e => { if(e.target.files[0]) readAndImport(e.target.f
 }));
 drop.addEventListener('drop', e => {
   const f = e.dataTransfer.files[0];
-  if(f) readAndImport(f);
+  if (f) readAndImport(f);
 });
 $('#scanBtn').onclick = async () => {
-  noteEl.className='note';
-  noteEl.innerHTML = `<span class="spin"></span>正在扫描收件箱…`;
   const r = await fetch('/api/import', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({scan:true})});
   const d = await r.json();
   await loadStatus();
-  noteEl.className = d.ok ? 'note' : 'note warn';
-  noteEl.textContent = d.ok ? `✅ ${d.message}` : (d.error || '导入失败');
+  alert(d.ok ? `✅ ${d.message}` : (d.error || '导入失败'));
+  if (!$('#mainView').hidden) loadList();
 };
 $('#copyScript').onclick = async () => {
   const box = $('#codeBox');
+  const d = await (await fetch('/api/export-script')).json();
+  if (!d.ok) { alert(d.error || '取不到脚本'); return; }
   try{
-    const r = await fetch('/api/export-script');
-    const d = await r.json();
-    if(!d.ok) throw new Error(d.error || '取不到脚本');
     await navigator.clipboard.writeText(d.code);
-    noteEl.className = 'note';
-    noteEl.textContent = '✅ 导出脚本已复制。去 calendar.sjtu.edu.cn/ui/calendar '
-                       + '按 F12 打开 Console 粘贴运行。';
-    box.style.display = 'none';
+    alert('✅ 导出脚本已复制。\n\n去 calendar.sjtu.edu.cn/ui/calendar 按 F12 '
+        + '打开 Console 粘贴运行，会下载一个 JSON 文件。');
+    box.hidden = true;
   }catch(e){
-    // 剪贴板不给用就把代码摊开，手动 Ctrl+C
-    box.style.display = 'block';
-    try{
-      const d = await (await fetch('/api/export-script')).json();
-      box.value = d.code || '';
-      box.select();
-      noteEl.className = 'note warn';
-      noteEl.textContent = '自动复制不可用，代码已展开并选中，请按 Ctrl+C 复制。';
-    }catch(e2){
-      noteEl.className = 'note warn';
-      noteEl.textContent = '取不到导出脚本：' + e.message;
-    }
+    box.hidden = false;
+    box.value = d.code;
+    box.select();
+    alert('自动复制不可用，代码已展开并选中，请按 Ctrl+C 复制。');
   }
 };
 
-/* ---------------------------------------------------------- 手动录入 */
-$('#kindSeg').addEventListener('click', e => {
-  const b = e.target.closest('button[data-kind]');
-  if(!b) return;
-  manualKind = b.dataset.kind;
-  [...$('#kindSeg').children].forEach(x => x.classList.toggle('on', x === b));
-  const isDl = manualKind === 'deadline';
-  $('#mEnd').style.display = isDl ? 'none' : '';
-  $('#mExtra').placeholder = isDl ? '课程名（可选）' : '地点（可选）';
-  $('#mExtra').value = '';
-  $('#mHint').innerHTML = isDl
-    ? '记作 <b>截止（deadline）</b>：只有一个时间点，就是「什么时候之前要交完」。'
-    : '记作 <b>日程</b>：有起止时间，出席即可。结束时间可以留空。';
-});
-$('#mAdd').onclick = async () => {
-  const title = $('#mTitle').value.trim();
-  if(!title){ alert('先写个标题'); return; }
-  const when = $('#mWhen').value;
-  if(!when){ alert('选一个时间'); return; }
-  const extra = $('#mExtra').value.trim();
-  const body = {kind: manualKind, title: title};
-  if(manualKind === 'deadline'){
-    body.due = when;
-    if(extra) body.course = extra;
-  }else{
-    body.start = when; body.end = $('#mEnd').value || null;
-    if(extra) body.location = extra;
-  }
-  const r = await fetch('/api/manual', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  const d = await r.json();
-  if(!d.ok){ alert(d.error || '添加失败'); return; }
-  $('#mTitle').value = ''; $('#mWhen').value = ''; $('#mEnd').value = '';
-  $('#mExtra').value = '';
-  await loadStatus();
-  const kindName = manualKind === 'deadline' ? '截止' : '日程';
-  noteEl.className = 'note';
-  noteEl.textContent = `✅ 已记作「${kindName}」：${title}`;
-  ask('这周有什么安排');
-};
-
-/* ---------------------------------------------------------- 其它 */
-function showToken(){ $('#tokenCard').style.display='block'; }
-$('#askBtn').onclick = () => { const t=$('#q').value.trim(); if(t) ask(t); };
-$('#q').addEventListener('keydown', e => { if(e.key==='Enter'){ const t=$('#q').value.trim(); if(t) ask(t);} });
-document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
-  $('#q').value = c.textContent.trim(); ask(c.textContent.trim());
-});
+/* ============================================================ 令牌 */
 $('#tokenBtn').onclick = async () => {
   const tok = $('#tokenInput').value.trim();
-  if(!tok) return;
-  const btn = $('#tokenBtn'); btn.disabled = true; btn.textContent='验证中…';
+  if (!tok) return;
+  const btn = $('#tokenBtn'); btn.disabled = true; btn.textContent = '验证中…';
   try{
     const r = await fetch('/api/token', {method:'POST',
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:tok})});
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({token: tok})});
     const d = await r.json();
-    if(d.ok){
-      $('#tokenInput').value='';
-      $('#tokenCard').style.display='none';
-      noteEl.className='note';
-      noteEl.textContent = `令牌已保存（${d.name}）。开始提问吧。`;
-    }else{
+    if (d.ok) {
+      $('#tokenInput').value = '';
+      await loadStatus();
+      alert('✅ 令牌已保存（' + d.name + '）');
+    } else {
       alert('验证失败：' + d.error);
     }
-  }catch(e){ alert('出错：'+e.message); }
-  finally{ btn.disabled=false; btn.textContent='验证并保存'; }
+  }catch(e){ alert('出错：' + e.message); }
+  finally{ btn.disabled = false; btn.textContent = '验证并保存'; }
 };
-$('#redo').onclick = e => { e.preventDefault(); showToken(); };
 
-/* ---------------------------------------------------------- 启动 */
+/* ============================================================ 其它 */
+$('#settingsBtn').onclick = () => showView('setup');
+$('#startBtn').onclick = () => showView('main');
+
 (async () => {
-  await loadStatus();
-  $('#q').value = '这周有什么安排';
-  ask('这周有什么安排');
+  syncTabs();
+  const s = await loadStatus();
+  // 没导入过交我办日历、也没开演示模式 → 先停在配置页
+  if (s.configured || s.demo) showView('main');
+  else showView('setup');
 })();
 </script>
 </body>

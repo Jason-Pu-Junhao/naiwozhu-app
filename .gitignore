@@ -9,6 +9,11 @@ app/data/
 __pycache__/
 *.pyc
 
+# 编辑器自己的东西（VS Code 的 C++ 符号数据库有好几 MB，不必入库）
+.vscode/
+.idea/
+*.code-workspace
+
 # 生成物与预览
 out/preview/
 out/.lo/

@@ -146,6 +146,10 @@ def api_status():
         "inbox": store.inbox,
         "manual_count": len(store.manual_items()),
         "has_export_script": os.path.exists(EXPORT_SCRIPT),
+        # 「首次配置」是否完成：交我办日历导进来过就算完成。
+        # 用"快照文件存不存在"来判断，不额外存一个标志位——
+        # 哪怕导进来 0 条也算配置过，不会把人弹回配置页。
+        "configured": bool(store.calendar_snapshot()),
         # 演示模式
         "demo": store.demo_on(),
         "demo_banner": demo.BANNER,
