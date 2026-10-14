@@ -152,6 +152,12 @@
   .way details{margin-top:11px}
   .waynote{margin:7px 0 0;font-size:12.5px;color:var(--faint);line-height:1.7}
   .waynote a{color:var(--navy)}
+  .waynote b{color:var(--gray)}
+  /* 装管理器 → 装脚本，写成有序两步，免得跳步 */
+  .steps{margin:10px 0 0;padding-left:20px;font-size:13px;color:var(--gray)}
+  .steps li{margin-top:12px;line-height:1.7}
+  .steps li:first-child{margin-top:0}
+  .steps li > b{color:var(--ink);font-weight:600}
   .codebox{margin:10px 0 0 30px;width:calc(100% - 30px);height:140px;
            font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
            border:1px solid var(--line);border-radius:8px;padding:10px}
@@ -219,15 +225,38 @@
 
     <div class="way">
       <div class="way-h"><span class="tag">省事</span>装一次，以后打开日历页就自动同步</div>
-      <p class="waynote">
-        需要先装用户脚本管理器（<b>Tampermonkey</b> 或 <b>Violentmonkey</b>），
-        装好后点下面这个按钮，管理器会弹出安装界面。
-        之后你打开交我办日历页，右下角会出现一个「奶我助」小面板，
-        它自己读数据、自己推给本机，不用再贴代码、也不用拖文件。
-      </p>
-      <div class="btnrow">
-        <a class="minibtn primary" href="/naiwozhu.user.js">安装自动同步脚本</a>
-      </div>
+
+      <ol class="steps">
+        <li>
+          <b>先装一个用户脚本管理器</b>
+          <div class="btnrow" style="margin-top:8px">
+            <a class="minibtn" target="_blank" rel="noreferrer"
+               href="https://chromewebstore.google.com/detail/dhdgffkkebhmkfjojejmpbldmpobfkfo">装 Tampermonkey（Chrome）</a>
+            <a class="minibtn" target="_blank" rel="noreferrer"
+               href="https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag">装 Violentmonkey（Chrome）</a>
+          </div>
+          <p class="waynote">
+            两个装一个就行，作用一样。
+            用 Edge / Firefox / Safari 的话去官网按浏览器选：
+            <a target="_blank" rel="noreferrer" href="https://www.tampermonkey.net/">Tampermonkey 官网</a>
+            ·
+            <a target="_blank" rel="noreferrer" href="https://violentmonkey.github.io/get-it/">Violentmonkey 官网</a>
+          </p>
+        </li>
+
+        <li>
+          <b>再装这个同步脚本</b>
+          <div class="btnrow" style="margin-top:8px">
+            <a class="minibtn primary" href="/naiwozhu.user.js">安装自动同步脚本</a>
+          </div>
+          <p class="waynote">
+            装好后打开 <code>calendar.sjtu.edu.cn/ui/calendar</code>，
+            右下角会出现一个「奶我助」小面板，它自己读数据、自己推给本机。<br>
+            <b>如果点上面那个按钮只是打开一段代码文本</b>，说明第 1 步的管理器还没装好——
+            回去装好，刷新这一页再点一次。
+          </p>
+        </li>
+      </ol>
     </div>
 
     <div class="way">
@@ -388,14 +417,44 @@ function fmtClock(ms){
 }
 
 /* ============================================================ 视图切换 */
+let watchTimer = null;
+
+/** 停在配置页时盯着有没有数据进来。
+ *  用户脚本推完数据后这一页会自己进去，不用手动刷新。 */
+function startSetupWatch(){
+  if (watchTimer) return;
+  watchTimer = setInterval(async () => {
+    let s;
+    try { s = await (await fetch('/api/status')).json(); }
+    catch (e) { return; }               // 服务没响应就下一轮再试
+    if (!s.configured && !s.demo) return;
+    stopSetupWatch();
+    state.hasData = !!s.configured;
+    applyDemo(s.demo, s.demo_banner);
+    checkReady();
+    showView('main');
+  }, 5000);
+}
+function stopSetupWatch(){
+  if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+}
+
 function showView(name){
   const setup = name === 'setup';
   $('#setupView').hidden = !setup;
   $('#mainView').hidden = setup;
   $('#settingsBtn').hidden = setup;
   window.scrollTo(0, 0);
-  if (setup) loadStatus();
-  else loadList();
+  if (setup) {
+    stopSetupWatch();
+    loadStatus().then(s => {
+      // 已经有数据就没必要盯；进配置页只是想改设置
+      if (!s.configured && !s.demo) startSetupWatch();
+    });
+  } else {
+    stopSetupWatch();
+    loadList();
+  }
 }
 
 /* ============================================================ 演示模式 */

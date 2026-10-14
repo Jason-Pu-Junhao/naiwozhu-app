@@ -87,14 +87,25 @@ export CANVAS_TOKEN='你复制的令牌'            # 或者临时用环境变�
 
 **省事：装一次用户脚本，以后零点击**
 
-1. 浏览器装 **Tampermonkey** 或 **Violentmonkey**
+1. 浏览器装 **Tampermonkey** 或 **Violentmonkey**（装一个就行，作用一样）
+   - Tampermonkey：[Chrome 商店](https://chromewebstore.google.com/detail/dhdgffkkebhmkfjojejmpbldmpobfkfo) · [官网（按浏览器选）](https://www.tampermonkey.net/)
+   - Violentmonkey：[Chrome 商店](https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag) · [官网（按浏览器选）](https://violentmonkey.github.io/get-it/)
+
+   配置页上把这几个链接都列出来了，不用去别处找。
 2. 打开「奶我助」的配置页，点「**安装自动同步脚本**」（就是
    <http://127.0.0.1:5173/naiwozhu.user.js>，管理器会拦截 `.user.js` 导航并弹安装界面）
 3. 以后打开 <https://calendar.sjtu.edu.cn/ui/calendar>，右下角会出现一个「奶我助」小面板，
    它自己读数据、自己推给本机
 
+> **点「安装自动同步脚本」只是打开一段代码文本？** 说明第 1 步的管理器还没装好。
+> 那个链接全靠管理器拦截导航，没有管理器，浏览器就只是把文件当文本打开。
+> 装好管理器、刷新配置页，再点一次。
+
 自动同步有 30 分钟的最小间隔，避免每次翻页都重推。面板上可以随时点「立即同步」
 或「下载 JSON」。本地服务没在跑的时候，面板会提示你去 `bash app/run.sh`。
+
+**配置页会自己盯着。** 停在配置页时它每 5 秒问一次服务端；一旦脚本把数据推了进来，
+页面就自己进主界面，不用手动刷新，也不用点「进入」。
 
 **不装扩展：手动跑一遍**
 
