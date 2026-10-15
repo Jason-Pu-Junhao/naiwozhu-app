@@ -105,6 +105,12 @@ def canvas_deadlines():
     except CanvasError as e:
         reset_cache()
         return [], f"Canvas 这次没取到数据：{e}"
+    except Exception as e:                       # noqa: BLE001
+        # 最后一道网：Canvas 那条线上任何没预料到的异常，都不许变成 500 的 HTML 页
+        # （前端是按 JSON 解析响应的，回 HTML 只会显示"JSON.parse 失败"）
+        reset_cache()
+        return [], (f"Canvas 那一步出了没预料到的错（{type(e).__name__}: {e}）。"
+                    "这次只显示本机记录，终端里有完整 traceback。")
 
     with _cache_lock:
         _cache["snap"] = (time.monotonic(), items)
@@ -148,6 +154,23 @@ def in_window(item, span=None, course_kw=None):
     if t is None or t < now:
         return True
     return span is None or span[0] <= t < span[1]
+
+
+# ------------------------------------------------------- 未预料异常的最后一道网
+@app.errorhandler(500)
+def on_500(e):
+    """任何没预料到的异常，也回 JSON。
+
+    前端把响应一律按 JSON 解析，回 HTML 的话页面上只会出现一句
+    「JSON.parse: unexpected character」，把真正的原因全遮住。
+    （真机上报过这个错：Canvas 连不上 → 500 HTML → 前端只显示 JSON 解析失败。）
+    """
+    orig = getattr(e, "original_exception", None)
+    detail = f"{type(orig).__name__}: {orig}" if orig else str(e)
+    app.logger.error("未处理的异常：%s", detail)
+    return jsonify({"ok": False,
+                    "error": f"服务端出了个没预料到的错（{detail}）。"
+                             "跑服务的那个终端里有完整 traceback。"}), 500
 
 
 # ---------------------------------------------------------------- 页面

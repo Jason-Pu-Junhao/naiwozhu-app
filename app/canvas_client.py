@@ -26,10 +26,34 @@ class CanvasClient:
         })
 
     # ---------------------------------------------------------------- 底层
+    @staticmethod
+    def _json(r):
+        """把响应体当 JSON 解；不是 JSON 就抛 CanvasError。
+
+        真实会遇到：网络里插了个登录页或代理错误页，返回的是 HTML。
+        直接 r.json() 抛出的 ValueError 会一路穿到 Flask，变成 500 的 HTML，
+        前端只能显示一句"JSON.parse: unexpected character"，真正的原因全被遮住。
+        """
+        try:
+            return r.json()
+        except ValueError:
+            raise CanvasError(
+                f"返回的不是 JSON（HTTP {r.status_code}）。前 200 字符：{r.text[:200]!r}"
+            )
+
     def _get(self, url, params=None):
         if not url.startswith("http"):
             url = self.base + url
-        r = self.s.get(url, params=params, timeout=TIMEOUT)
+        try:
+            r = self.s.get(url, params=params, timeout=TIMEOUT)
+        except requests.RequestException as e:
+            # 连不上、超时、代理不可用都走这里。必须包成 CanvasError：
+            # 调用方只认这一种异常，漏出去就会变成 500 的 HTML 页。
+            raise CanvasError(
+                f"连不上 {self.base}。先查网络：网断了、校园网没连上、"
+                f"或者终端里设了 HTTPS_PROXY 指向一个没开的代理。"
+                f"（原始错误：{str(e)[:200]}）"
+            )
         if r.status_code == 401:
             raise CanvasError(
                 "401 未授权：令牌无效或已撤销。请重新在 "
@@ -66,7 +90,7 @@ class CanvasClient:
         while url:
             page += 1
             r = self._get(url, params if page == 1 else None)
-            data = r.json()
+            data = self._json(r)
             if self.verbose:
                 print(f"    [翻页] 第 {page} 页，{len(data)} 条")
             for item in data:
@@ -75,11 +99,11 @@ class CanvasClient:
 
     # ---------------------------------------------------------------- 接口
     def me(self):
-        return self._get("/api/v1/users/self").json()
+        return self._json(self._get("/api/v1/users/self"))
 
     def profile(self):
         """个人信息。学号（login_id）只有这个接口里有，me() 里是 null。"""
-        return self._get("/api/v1/users/self/profile").json()
+        return self._json(self._get("/api/v1/users/self/profile"))
 
     def courses(self, include_term=True):
         params = {"enrollment_state": "active"}

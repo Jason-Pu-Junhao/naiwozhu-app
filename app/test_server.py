@@ -373,6 +373,39 @@ def main():
         code, r = q("", kind="作业")
         check("★不认识的问题类型 → 400（不悄悄返回空列表）", code == 400, code)
 
+        print("\nCanvas 挂了的时候（回归：这里曾经返回 500 的 HTML）")
+        import requests
+
+        class BoomDDL:
+            """模拟 Canvas 连不上：抛的是 requests 的异常，不是 CanvasError。"""
+
+            def __init__(self, client, verbose=False):
+                pass
+
+            def pending(self, *a, **kw):
+                raise requests.exceptions.ConnectionError(
+                    "Failed to establish a new connection")
+
+        server.DDLService = BoomDDL
+        server.reset_cache()
+        c.post("/api/demo", json={"on": False})
+        resp = c.post("/api/query", json={"kind": model.KIND_DEADLINE})
+        check("★Canvas 连不上时不再返回 500", resp.status_code == 200, resp.status_code)
+        r = resp.get_json()
+        # 注意：本机记录（交我办 + 手动录入）照常显示，所以 items 不一定为空；
+        # 要断言的是"没有任何一条来自 Canvas"，以及把原因说清楚
+        check("★而是 200 + 一句警告",
+              r is not None and bool(r.get("warning"))
+              and all(i.get("source") != model.SRC_CANVAS
+                      for i in (r.get("items") or [])),
+              str(r)[:100])
+        check("警告里说明是 Canvas 取不到",
+              "Canvas" in (r or {}).get("warning", ""), (r or {}).get("warning"))
+        check("出错不写进缓存",
+              c.get("/api/status").get_json()["cache_age"] is None)
+        server.DDLService = FakeDDLService
+        server.reset_cache()
+
         print("\n网页上的下拉列表和服务端是同一份选项")
         # 选项清单在 query.RANGES 里，网页上照着写了一遍。
         # 这条检查就是防两边改歪：多一个少一个、或者文字不一样都算失败。

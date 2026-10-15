@@ -32,7 +32,7 @@ class FakeResp:
         return self._d
 
 
-from canvas_client import CanvasClient
+from canvas_client import CanvasClient, CanvasError
 
 import console        # noqa: E402
 
@@ -179,6 +179,43 @@ def main():
     ok &= check("30 分钟后到期被识别", (not over) and "分钟" in rem, rem)
     rem, over = _remaining(None)
     ok &= check("无截止时间不报错", rem == "—")
+
+    # ---- 回归：网络失败与非 JSON 响应都必须变成 CanvasError ----
+    # 真机上踩过：Canvas 连不上时抛的是 requests.ConnectionError，
+    # 漏到 Flask 就变成 500 的 HTML 页，前端只显示"JSON.parse 失败"。
+    print("\n连不上 / 返回的不是 JSON（都必须是 CanvasError）")
+    import requests
+
+    real = CanvasClient("https://example.invalid", "fake-token")
+
+    def boom(*a, **kw):
+        raise requests.ConnectionError("Failed to establish a new connection")
+
+    real.s.get = boom
+    try:
+        real._get("/api/v1/users/self/todo")
+        ok &= check("连接失败抛的是 CanvasError", False, "居然没抛")
+    except CanvasError as e:
+        ok &= check("★连接失败会包成 CanvasError", "连不上" in str(e), str(e)[:50])
+    except Exception as e:
+        ok &= check("★连接失败会包成 CanvasError", False, f"抛的是 {type(e).__name__}")
+
+    class HtmlResp:
+        status_code, headers, text = 200, {}, "<html>请先登录</html>"
+
+        def json(self):
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    real2 = CanvasClient("https://example.invalid", "fake-token")
+    real2.s.get = lambda *a, **kw: HtmlResp()
+    try:
+        list(real2._paginate("/api/v1/users/self/todo"))
+        ok &= check("非 JSON 响应抛的是 CanvasError", False, "居然没抛")
+    except CanvasError as e:
+        ok &= check("★非 JSON 响应会包成 CanvasError",
+                    "不是 JSON" in str(e) and "请先登录" in str(e), str(e)[:60])
+    except Exception as e:
+        ok &= check("★非 JSON 响应会包成 CanvasError", False, f"抛的是 {type(e).__name__}")
 
     print("\n" + "=" * 50)
     print("全部通过 ✓" if ok else "有失败项 ✗")
