@@ -568,6 +568,15 @@ def _bad(prefixes):
                for r in RESULTS if not r.get("simulated"))
 
 
+def _skipped(rid):
+    return any(r["id"] == rid and r["status"] == "SKIP" for r in RESULTS)
+
+
+def _text(v):
+    """判定文案可以是字符串，也可以是个函数（按前面的结果动态给话术）。"""
+    return v() if callable(v) else v
+
+
 # (名字, 有没有问题, 有问题的说法, 没问题的说法, 这一步在测什么)
 VERDICTS = [
     ("能不能跑起来",
@@ -580,7 +589,9 @@ VERDICTS = [
      "四套测试在默认（重定向）编码环境下会不会崩"),
     ("中文会不会变方框",
      lambda: any(r["id"] == "F1" and r["status"] == "FAIL" for r in RESULTS),
-     "会：项目配置的字体缺汉字字形", "不会：字体有汉字字形",
+     "会：项目配置的字体缺汉字字形",
+     lambda: ("未测：这份仓库里没有配图脚本（src/），字体这项跳过了"
+              if _skipped("F1") else "不会：字体有汉字字形"),
      "配图里的中文会不会渲染成方框"),
 ]
 
@@ -590,9 +601,10 @@ def summary():
     out = {}
     for name, fn, bad_txt, good_txt, why in VERDICTS:
         bad = fn()
-        print("  %-16s %s" % (name, bad_txt if bad else good_txt))
+        text = _text(bad_txt) if bad else _text(good_txt)
+        print("  %-16s %s" % (name, text))
         print("      %s" % why)
-        out[name] = {"bad": bad, "text": bad_txt if bad else good_txt}
+        out[name] = {"bad": bad, "text": text}
     fails = [r for r in RESULTS if r["status"] == "FAIL" and not r.get("simulated")]
     sim = [r for r in RESULTS if r["status"] == "FAIL" and r.get("simulated")]
     print("\n  失败 %d 项（另有 %d 项模拟项失败，不计入），注意 %d 项，跳过 %d 项" % (
