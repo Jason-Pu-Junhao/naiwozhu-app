@@ -39,7 +39,7 @@ class FakeClient(CanvasClient):
     """继承真客户端、只覆写 _get。
 
     这样 _paginate / _next_link 用的是**生产代码**，
-    翻页逻辑真的被测到了，而不是被测一份复制品。
+    翻页逻辑真的被测到了，测的是生产代码本身。
     """
 
     def __init__(self):
