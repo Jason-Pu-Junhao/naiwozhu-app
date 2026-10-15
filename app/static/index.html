@@ -39,32 +39,28 @@
   .banner{background:#FFF8EE;border-left:2px solid var(--orange);color:#8A5210;
           padding:10px 14px;margin:18px 0 0;font-size:13px;line-height:1.65}
 
-  /* ---------- 搜索 ---------- */
-  .search{display:flex;gap:10px;margin:26px 0 0}
-  .search input{flex:1;padding:11px 14px;background:var(--soft);border:1px solid transparent;
-                border-radius:8px;outline:none}
-  .search input:focus{background:#fff;border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-l)}
-  .search .go{padding:11px 18px;border-radius:8px;background:var(--navy);color:#fff;
-              font-weight:600;font-size:14px}
-  .search .go:disabled{opacity:.45}
-  .search .ghost{padding:11px 14px;border-radius:8px;color:var(--gray);
-                 border:1px solid var(--line)}
-  .search .ghost:hover{color:var(--navy);border-color:var(--navy)}
-  .hints{margin:11px 0 0;font-size:12.5px;color:var(--faint);line-height:2}
-  .hints button{font-size:12.5px;color:var(--gray)}
-  .hints button:hover{color:var(--navy);text-decoration:underline}
-  .hints .sep{margin:0 7px;opacity:.45}
-
-  /* ---------- 标签页 ---------- */
-  .bar{display:flex;align-items:flex-end;gap:16px;margin:26px 0 0;
-       border-bottom:1px solid var(--line)}
-  .tabs{display:flex;gap:22px;flex:1}
-  .tabs button{font-size:14.5px;font-weight:600;color:var(--faint);
-               padding:0 0 11px;border-bottom:2px solid transparent;margin-bottom:-1px}
-  .tabs button:hover{color:var(--gray)}
-  .tabs button.on{color:var(--navy);border-bottom-color:var(--navy)}
-  .bar .ghost{font-size:13.5px;color:var(--gray);padding:0 0 11px}
-  .bar .ghost:hover{color:var(--navy)}
+  /* ---------- 查询条 ---------- */
+  /* 条件和问题都从下拉列表里选，没有输入框：说法不用猜，筛选也说得清 */
+  .qbar{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:26px 0 0}
+  .qbar .lab{font-size:13px;color:var(--faint)}
+  .qbar select{font-family:inherit;font-size:14px;color:var(--ink);
+               padding:9px 11px;background:var(--soft);border:1px solid transparent;
+               border-radius:8px;outline:none;cursor:pointer;max-width:12em}
+  .qbar select:focus{background:#fff;border-color:var(--navy);
+                     box-shadow:0 0 0 3px var(--navy-l)}
+  .qbar .go{padding:9px 18px;border-radius:8px;background:var(--navy);color:#fff;
+            font-weight:600;font-size:14px}
+  .qbar .sp{flex:1}
+  .qbar .ghost{padding:9px 13px;border-radius:8px;color:var(--gray);
+               border:1px solid var(--line);font-size:13.5px;white-space:nowrap}
+  .qbar .ghost:hover{color:var(--navy);border-color:var(--navy)}
+  .customrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+             margin:10px 0 0;font-size:13px;color:var(--gray)}
+  .customrow input{font-family:inherit;font-size:13.5px;color:var(--ink);
+                   padding:7px 10px;border:1px solid var(--line);
+                   border-radius:7px;outline:none}
+  .customrow input:focus{border-color:var(--navy)}
+  .customrow .tip{margin:0}
 
   .note{font-size:13px;color:var(--faint);margin:14px 0 0;min-height:20px}
   .note.warn{color:var(--orange)}
@@ -362,29 +358,32 @@
 <div class="wrap" id="mainView" hidden>
   <div class="banner" id="banner" hidden></div>
 
-  <div class="search">
-    <input id="q" placeholder="问一句，比如：我还有哪些作业没交" autocomplete="off">
+  <div class="qbar">
+    <span class="lab">时间</span>
+    <select id="rangeSel" title="要看哪一段时间的">
+      <option value="all">不限时间</option>
+      <option value="today">今天</option>
+      <option value="tomorrow">明天</option>
+      <option value="3d">近 3 天</option>
+      <option value="7d">一周内</option>
+      <option value="custom">自定义</option>
+    </select>
+    <span class="lab">问题</span>
+    <select id="kindSel" title="要问哪一类">
+      <option value="all">全部</option>
+      <option value="日程">有什么日程</option>
+      <option value="deadline">有什么任务</option>
+    </select>
     <button class="go" id="askBtn">查询</button>
-    <button class="ghost" id="clearBtn" hidden>清除</button>
     <button class="ghost" id="refreshBtn" title="跳过缓存，重新从 Canvas 取一次">刷新</button>
-  </div>
-
-  <div class="hints" id="hints">
-    可以问：
-    <button>我还有哪些作业没交</button><span class="sep">·</span>
-    <button>明天有什么要交的</button><span class="sep">·</span>
-    <button>这周还有什么没交</button><span class="sep">·</span>
-    <button>我明天有什么日程</button><span class="sep">·</span>
-    <button>这周有什么安排</button>
-  </div>
-
-  <div class="bar">
-    <nav class="tabs" id="tabs">
-      <button data-tab="all" class="on">全部</button>
-      <button data-tab="日程">日程</button>
-      <button data-tab="deadline">ddl</button>
-    </nav>
+    <span class="sp"></span>
     <button class="ghost" id="addToggle">+ 添加</button>
+  </div>
+
+  <div class="customrow" id="customRow" hidden>
+    <span>从</span><input type="date" id="startD">
+    <span>到</span><input type="date" id="endD">
+    <span class="tip">含首尾两天</span>
   </div>
 
   <div class="note" id="note"></div>
@@ -414,20 +413,21 @@ const $ = s => document.querySelector(s);
 const listEl = $('#list'), noteEl = $('#note'), PAGE = 10;
 
 const state = {
-  tab: 'all',        // 'all' | '日程' | 'deadline'
-  days: null,
-  course_kw: null,
+  range: 'all',      // 时间下拉列表：all / today / tomorrow / 3d / 7d / custom
+  kind: 'all',       // 问题下拉列表：all / 日程 / deadline
   items: [],
   expanded: false,
-  activeQuery: false,
   hasData: false,    // 交我办 JSON 是否已导入过
 };
 let manualKind = 'deadline';
 
-// 允许用 ?tab=日程 直接停在某一格，方便存书签
+// 允许用 ?tab=日程 直接停在一格，方便存书签（老地址里叫 tab，照旧认）
 {
-  const t = new URLSearchParams(location.search).get('tab');
-  if (['all', '日程', 'deadline'].includes(t)) state.tab = t;
+  const t = new URLSearchParams(location.search).get('tab')
+         || new URLSearchParams(location.search).get('kind');
+  const sel = $('#kindSel');
+  if (t && [...sel.options].some(o => o.value === t)) sel.value = t;
+  state.kind = sel.value;
 }
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,
@@ -589,8 +589,8 @@ function renderList(){
   const all = state.items || [];
   if (!all.length) {
     // 用 <strong>：.empty b 是 display:block 的大字标题，这里要的是行内强调
-    listEl.innerHTML = `<div class="empty"><b>这一格是空的</b>
-      换个标签页看看，或者点右上角「+ 添加」记一条。<br>
+    listEl.innerHTML = `<div class="empty"><b>这一段里没有内容</b>
+      换个时间范围或问题类型再查一次，或者点右上角「+ 添加」记一条。<br>
       <span style="font-size:13px">如果想要有数据可以看，打开顶部的
       <strong style="color:var(--navy)">演示数据</strong>开关。</span></div>`;
     return;
@@ -631,17 +631,20 @@ function noteFor(d, extra){
   return {text: bits.filter(Boolean).join('　'), warn: !!d.warning};
 }
 
-async function loadList(opts){
-  opts = opts || {};
+async function loadList(refresh){
   const body = {};
-  if (opts.text) {
-    body.text = opts.text;
-  } else {
-    if (state.tab !== 'all') body.kind = state.tab;
-    if (state.days != null) body.days = state.days;
-    if (state.course_kw) body.course_kw = state.course_kw;
+  if (state.kind !== 'all') body.kind = state.kind;
+  if (state.range !== 'all') body.range = state.range;
+  if (state.range === 'custom') {
+    body.start = $('#startD').value;
+    body.end = $('#endD').value;
+    if (!body.start || !body.end) {
+      noteEl.className = 'note warn';
+      noteEl.textContent = '自定义范围要填开始和结束日期。';
+      return;
+    }
   }
-  if (opts.refresh) body.refresh = true;
+  if (refresh) body.refresh = true;
 
   noteEl.className = 'note';
   noteEl.innerHTML = '正在取数据…';
@@ -650,46 +653,25 @@ async function loadList(opts){
     const r = await fetch('/api/query', {method:'POST',
       headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
-    if (!r.ok) {
+    if (!r.ok || !d.ok) {
       noteEl.className = 'note warn';
       noteEl.textContent = d.error || '查询失败';
       return;
     }
     applyDemo(d.demo, d.demo_banner);
 
-    // 一句话问出来的，把标签页和窗口同步过来，让下面的按钮和结果对得上
-    if (d.parsed) {
-      if (!d.parsed.is_query) {
-        noteEl.className = 'note warn';
-        noteEl.innerHTML = esc(d.note || '这句我没当成查询') +
-          `<br><span style="font-size:12.5px">` +
-          esc(d.help||'').replace(/\n/g,'<br>') + `</span>`;
-        state.items = []; state.expanded = false;
-        listEl.innerHTML = `<div class="empty"><b>这句我按陈述处理了</b>
-          没有去查数据。如果确实想查，可以问「明天有什么要交的」。</div>`;
-        return;
-      }
-      state.tab = d.parsed.want_kind || 'all';
-      state.days = d.parsed.days;
-      state.course_kw = d.parsed.course_kw;
-      state.activeQuery = true;
-      syncTabs();
-    }
-
     state.items = d.items || [];
     state.expanded = false;
 
-    const extra = [];
-    if (state.course_kw) extra.push(`课程「${state.course_kw}」`);
-    if (state.days != null) {
-      const w = {1:'今天',2:'明天',3:'后天',7:'这周',14:'下周',31:'一个月'}[state.days];
-      extra.push(w ? w : `${state.days} 天内`);
-    }
+    // 提示行说的是**服务端实际用的**区间，不是页面上选的，
+    // 两边要是不一致，这里一眼就能看出来
+    const extra = [d.range_label || '不限时间'];
+    if (d.range === 'custom' && d.window) extra.push(`范围 ${d.window}`);
+    if (d.kind) extra.push(d.kind === 'deadline' ? '只看任务' : '只看日程');
     const n = noteFor(d, extra.join(' · '));
     noteEl.className = n.warn ? 'note warn' : 'note';
     noteEl.textContent = n.text;
 
-    $('#clearBtn').hidden = !state.activeQuery;
     renderList();
   }catch(e){
     noteEl.className = 'note warn';
@@ -697,47 +679,43 @@ async function loadList(opts){
   }
 }
 
-/* ============================================================ 标签页 */
-function syncTabs(){
-  [...$('#tabs').children].forEach(b =>
-    b.classList.toggle('on', b.dataset.tab === state.tab));
+/* ============================================================ 查询条 */
+/** 选中的选项文字，用来拼提示行 */
+function selText(sel){ return sel.options[sel.selectedIndex].textContent.trim(); }
+const pad2 = n => String(n).padStart(2,'0');
+function dayStr(offset){
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
-$('#tabs').addEventListener('click', e => {
-  const b = e.target.closest('button[data-tab]');
-  if (!b) return;
-  state.tab = b.dataset.tab;
-  state.days = null;
-  state.course_kw = null;
-  state.activeQuery = false;
-  syncTabs();
-  $('#q').value = '';
-  loadList();
-});
-$('#askBtn').onclick = () => {
-  const t = $('#q').value.trim();
-  if (t) loadList({text: t});
+function readQuery(){
+  state.range = $('#rangeSel').value;
+  state.kind = $('#kindSel').value;
+  const custom = state.range === 'custom';
+  $('#customRow').hidden = !custom;
+  if (custom) {                    // 默认给一段能直接查的区间，不让人先对着空框发呆
+    if (!$('#startD').value) $('#startD').value = dayStr(0);
+    if (!$('#endD').value) $('#endD').value = dayStr(6);
+  }
+}
+/** 条件改了但还没查：先说一句，免得以为换了没反应 */
+function markDirty(){
+  noteEl.className = 'note';
+  noteEl.textContent = `条件已改为「${selText($('#rangeSel'))} · `
+    + `${selText($('#kindSel'))}」，点「查询」看结果。`;
+}
+$('#rangeSel').onchange = $('#kindSel').onchange = () => { readQuery(); markDirty(); };
+$('#startD').onchange = $('#endD').onchange = () => {
+  readQuery();
+  if ($('#startD').value && $('#endD').value && $('#endD').value < $('#startD').value) {
+    noteEl.className = 'note warn';
+    noteEl.textContent = '结束日期比开始日期早，改一下再查。';
+  } else {
+    markDirty();
+  }
 };
-$('#q').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { const t = $('#q').value.trim(); if (t) loadList({text: t}); }
-});
-$('#clearBtn').onclick = () => {
-  state.activeQuery = false;
-  state.days = null;
-  state.course_kw = null;
-  $('#q').value = '';
-  $('#clearBtn').hidden = true;
-  loadList();
-};
-$('#hints').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  $('#q').value = b.textContent.trim();
-  loadList({text: $('#q').value});
-});
-$('#refreshBtn').onclick = () => {
-  const t = $('#q').value.trim();
-  loadList(t ? {text: t, refresh: true} : {refresh: true});
-};
+$('#askBtn').onclick = () => loadList();
+$('#refreshBtn').onclick = () => loadList(true);
 
 /* ============================================================ 添加 */
 $('#addToggle').onclick = () => {
@@ -780,9 +758,13 @@ $('#mAdd').onclick = async () => {
   if (!d.ok) { alert(d.error || '添加失败'); return; }
   ['#mTitle','#mWhen','#mEnd','#mExtra'].forEach(s => { $(s).value = ''; });
   const kind = manualKind === 'deadline' ? '截止' : '日程';
-  const rightTab = manualKind === 'deadline' ? 'deadline' : '日程';
-  state.tab = rightTab; state.days = null; state.course_kw = null;
-  state.activeQuery = false; syncTabs();
+  // 新条目多半不在当前的时间范围里（比如选着「今天」却记了一条下个月的），
+  // 所以把条件放宽成「不限时间 + 它所属的类型」，免得刚添加完反而看不见它
+  state.range = 'all';
+  state.kind = manualKind;
+  $('#rangeSel').value = 'all';
+  $('#kindSel').value = manualKind;
+  readQuery();
   await loadList();
   noteEl.textContent = `✅ 已记作「${kind}」：${title}　${noteEl.textContent}`;
 };
@@ -892,7 +874,7 @@ $('#settingsBtn').onclick = () => showView('setup');
 $('#startBtn').onclick = () => showView('main');
 
 (async () => {
-  syncTabs();
+  readQuery();      // 把两个下拉列表的初值读进 state，顺便摆好自定义那一行
   const s = await loadStatus();
   // 没导入过交我办日历、也没开演示模式 → 先停在配置页
   if (s.configured || s.demo) showView('main');

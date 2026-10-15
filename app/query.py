@@ -1,13 +1,108 @@
-"""把一句话解析成查询条件。
+"""把各种输入规范化成同一组查询条件。
 
-第一步（网页版）先用纯规则做；第二步加语音时，
-把输入从"文本框"换成"识别结果"，这个模块原样复用。
+两条输入路径，出口是同一个：
+
+    网页上的下拉列表   → resolve_range()：预设区间 / 自定义起止日期
+    一句话（语音、CLI）→ parse()：时间词 + 类型意图 + 课程简称 + 否定句
+
+网页那条路**不经过文字解析**：时间是从下拉列表里选的，不靠猜。
+等第二步接上语音，识别出来的文字再走 parse()，条件凑齐后交给同一套筛选。
 
 这里刻意不做大模型：指令只有几条，规则写清楚就够，而且完全可控。
 """
 import re
+from datetime import datetime, timedelta
 
-# ---- 时间词 → 天数窗口 ----
+from model import CST
+
+# ---- 时间范围：网页下拉列表的选项 ----
+#
+# 这份清单同时是三个地方的依据：网页上照着它渲染下拉框、
+# 服务端照着它解析、测试再回头核对两边一字不差。改这里就是改全局。
+RANGES = [
+    ("all",      "不限时间"),
+    ("today",    "今天"),
+    ("tomorrow", "明天"),
+    ("3d",       "近 3 天"),
+    ("7d",       "一周内"),
+    ("custom",   "自定义"),
+]
+RANGE_LABELS = dict(RANGES)
+
+
+def day_start(dt):
+    """某一天在东八区的 00:00。"""
+    d = dt.astimezone(CST)
+    return datetime(d.year, d.month, d.day, tzinfo=CST)
+
+
+def parse_day(s):
+    """"2025-10-15" 这类日期 → 那一天的 00:00；解析不了返回 None。"""
+    import model
+    dt = model.parse_dt(s)
+    return day_start(dt) if dt is not None else None
+
+
+def resolve_range(range_id, start=None, end=None, now=None):
+    """把下拉列表选的时间变成半开区间 (起, 止)。
+
+    "all" → None，表示不加时间限制（"我还有哪些作业没交"就是这一档）。
+    "custom" 用 start/end 两个日期，**含首尾两天**。
+    选项不认识、或者自定义的日期不成立时抛 ValueError，由调用方转成 400，
+    让人看到哪里填错了；悄悄返回一个空列表反而更难查。
+    """
+    rid = (range_id or "").strip()
+    if rid in ("", "all"):
+        return None
+    today = day_start(now or datetime.now(CST))
+    one = timedelta(days=1)
+    preset = {
+        "today":    (today, today + one),          # 今天 00:00 ~ 明天 00:00
+        "tomorrow": (today + one, today + 2 * one),
+        "3d":       (today, today + 3 * one),      # 今天、明天、后天
+        "7d":       (today, today + 7 * one),      # 今天起七天
+    }
+    if rid in preset:
+        return preset[rid]
+    if rid == "custom":
+        s, e = parse_day(start), parse_day(end)
+        if s is None or e is None:
+            raise ValueError("自定义范围要填开始和结束日期")
+        if e < s:
+            raise ValueError("结束日期不能早于开始日期")
+        return (s, e + one)
+    raise ValueError(f"不认识的时间范围：{range_id}")
+
+
+def span_from_days(days, now=None):
+    """一句话问出来的"未来 N 天"，也折成半开区间。
+
+    语音/CLI 走这条：它说的是"从现在起 N 天"，讲的是离现在多少天，
+    所以起点是此刻，"今天 00:00"反而是另一套说法。
+    """
+    if days is None:
+        return None
+    t = now or datetime.now(CST)
+    return (t, t + timedelta(days=days))
+
+
+def range_label(range_id):
+    """下拉列表选项给人看的名字。"""
+    return RANGE_LABELS.get((range_id or "").strip(), "")
+
+
+def span_label(span):
+    """区间的给人看写法。区间是半开的，排版时把右端减一秒再说。"""
+    if span is None:
+        return ""
+    s = span[0].astimezone(CST)
+    e = (span[1] - timedelta(seconds=1)).astimezone(CST)
+    if s.date() == e.date():
+        return f"{s:%m-%d}"
+    return f"{s:%m-%d} ~ {e:%m-%d}"
+
+
+# ---- 时间词 → 天数窗口（只给一句话那条路用）----
 TIME_WORDS = [
     (r"今天|今日", 1),
     (r"明天|明日", 2),
@@ -79,11 +174,12 @@ def extract_course(low):
 
 
 def parse(text):
-    """把一句话解析成查询条件。
+    """把一句话解析成查询条件（语音、命令行走这条；网页不走这里）。
 
     返回 {'is_query', 'negated', 'days', 'course_kw', 'want_kind', 'reason'}
 
     want_kind 为 'deadline' / '日程' / None（两种都列出来）。
+    days 交给 span_from_days() 折成时间区间。
     """
     t = (text or "").strip()
     if not t:

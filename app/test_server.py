@@ -37,6 +37,7 @@ os.environ["CANVAS_TOKEN"] = "fake-token-for-test"
 
 import model                                   # noqa: E402
 from model import CST, make_deadline            # noqa: E402
+import query as query_mod                       # noqa: E402
 import server                                  # noqa: E402
 
 # /api/token 会往 app/config.local.json 里写字。
@@ -246,8 +247,8 @@ def main():
               "假的远期报告" not in [i["title"] for i in
                                      q("这周有什么安排")[1]["items"]])
 
-        print("\n按标签页取数（不带文字，只给 kind / days）")
-        # 网页上「全部 / 日程 / ddl」三个按钮走的就是这条路径，
+        print("\n按条件取数（不带文字，只给 kind / range）")
+        # 网页上两个下拉列表走的就是这条路径，
         # 和"问一句话"是同一个接口，只是不带 text。
         code, r = q("", kind=model.KIND_SCHEDULE)
         check("只给 kind 也能查", code == 200 and r["ok"], r)
@@ -262,10 +263,11 @@ def main():
         check("kind=deadline 会去拿 Canvas 数据",
               any(i["id"] == "fake-1" for i in r["items"]))
 
-        code, r = q("", days=7)
-        check("只给时间窗也能查", code == 200 and r["ok"])
-        check("时间窗滤掉了 30 天后那条",
+        code, r = q("", range="7d")
+        check("只给时间范围也能查", code == 200 and r["ok"])
+        check("「一周内」滤掉了 30 天后那条",
               "假的远期报告" not in [i["title"] for i in r["items"]])
+        check("返回里带上范围的名字", r["range_label"] == "一周内", r["range_label"])
 
         print("\n否定句与听不出来的话")
         _, r = q("明天没什么要交的")
@@ -283,6 +285,97 @@ def main():
         c.post("/api/demo", json={"on": False})
         check("关掉演示模式会清缓存",
               c.get("/api/status").get_json()["cache_age"] is None)
+
+        print("\n时间范围（下拉列表）")
+        # 时间窗必须**相对"现在"**构造：写死日期过几天就跑不过了。
+        # "今天"用一条"正在进行的日程"来表示，这样不管几点跑都成立。
+        now = datetime.now(CST)
+
+        def at(days, hour=12):
+            d = (now + timedelta(days=days)).replace(hour=hour, minute=0,
+                                                     second=0, microsecond=0)
+            return d.strftime("%Y-%m-%d %H:%M")
+
+        payload = {
+            "exported_at": now.isoformat(),
+            "calendars": {"my": [{"id": 11, "name": "我的日程"}]},
+            "events": [
+                {"eventId": 21, "calendarId": 11, "title": "正在进行的日程",
+                 "startTime": (now - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M"),
+                 "endTime": (now + timedelta(minutes=55)).strftime("%Y-%m-%d %H:%M")},
+                {"eventId": 22, "calendarId": 11, "title": "明天的日程",
+                 "startTime": at(1), "endTime": at(1, 13)},
+                {"eventId": 23, "calendarId": 11, "title": "十天后的日程",
+                 "startTime": at(10), "endTime": at(10, 13)},
+            ],
+        }
+        r = c.post("/api/import", json={"payload": payload,
+                                        "filename": "range.json"}).get_json()
+        check("导入了三条不同日期的日程", r["ok"] and r["count"] == 3, r)
+
+        od = c.post("/api/manual", json={
+            "kind": "deadline", "title": "逾期未交的作业",
+            "due": (now - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
+        }).get_json()
+        check("再加一条两天前就该交的作业", od["ok"], od)
+
+        # 演示模式在上一步已经关掉，这里走真 Canvas（假客户端）
+        t = lambda r: [i["title"] for i in r["items"]]        # noqa: E731
+
+        _, r = q("", range="today")
+        check("「今天」带上正在进行的日程", "正在进行的日程" in t(r), t(r))
+        check("「今天」挡掉明天的日程", "明天的日程" not in t(r), t(r))
+        check("「今天」挡掉十天后的日程", "十天后的日程" not in t(r), t(r))
+        check("★「今天」仍然列出已经过期还没交的作业",
+              "逾期未交的作业" in t(r), t(r))
+        check("「今天」的区间就是今天一整天",
+              r["range_label"] == "今天" and r["window"] == now.strftime("%m-%d"),
+              (r["range_label"], r["window"]))
+
+        _, r = q("", range="tomorrow")
+        check("「明天」只带明天的日程",
+              "明天的日程" in t(r) and "正在进行的日程" not in t(r), t(r))
+
+        _, r = q("", range="3d")
+        check("「近 3 天」挡掉十天后的", "十天后的日程" not in t(r), t(r))
+
+        _, r = q("", range="all")
+        check("「不限时间」把十天后的也带上", "十天后的日程" in t(r), t(r))
+        check("不限时间时没有区间文字", r["window"] == "", r["window"])
+
+        # 两个下拉一起用：问题=有什么日程、时间=明天
+        _, r = q("", kind=model.KIND_SCHEDULE, range="tomorrow")
+        check("★两个下拉一起用：明天的日程只剩日程一条",
+              t(r) == ["明天的日程"], t(r))
+
+        _, r = q("", range="custom", start=now.strftime("%Y-%m-%d"),
+                 end=(now + timedelta(days=1)).strftime("%Y-%m-%d"))
+        check("自定义区间含首尾两天",
+              "正在进行的日程" in t(r) and "明天的日程" in t(r)
+              and "十天后的日程" not in t(r), t(r))
+        check("自定义区间把范围写出来",
+              "~" in (r["window"] or ""), r["window"])
+
+        code, r = q("", range="custom", start="2025-10-07", end="2025-10-01")
+        check("自定义区间反过来填 → 400", code == 400, code)
+        check("并且说明原因", "不能早于" in (r.get("error") or ""), r)
+
+        code, r = q("", range="custom")
+        check("自定义区间没填日期 → 400", code == 400, code)
+
+        code, r = q("", range="下个月")
+        check("不在列表里的时间范围 → 400", code == 400, code)
+
+        code, r = q("", kind="作业")
+        check("★不认识的问题类型 → 400（不悄悄返回空列表）", code == 400, code)
+
+        print("\n网页上的下拉列表和服务端是同一份选项")
+        # 选项清单在 query.RANGES 里，网页上照着写了一遍。
+        # 这条检查就是防两边改歪：多一个少一个、或者文字不一样都算失败。
+        html = c.get("/").get_data(as_text=True)
+        for rid, label in query_mod.RANGES:
+            check(f"下拉列表里有「{label}」",
+                  f'<option value="{rid}">{label}</option>' in html, rid)
 
         print("\n浏览器端的分发")
         resp = c.get("/naiwozhu.user.js")

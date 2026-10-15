@@ -20,7 +20,7 @@ import threading
 import time
 import webbrowser
 import zipfile
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -108,11 +108,20 @@ def canvas_deadlines():
 
 
 # ---------------------------------------------------------------- 工具
-def in_window(item, days=None, course_kw=None):
-    """两类条目共用的筛选：时间窗口 + 课程关键词。
+def in_window(item, span=None, course_kw=None):
+    """两类条目共用的筛选：时间区间 + 课程关键词。
 
-    deadline 允许过期（还没交就是还没交）；
-    日程已经结束的就不再列出来了。
+    span 是 (起, 止) 半开区间，None 表示不限时间。
+
+    两类的规则不一样，是有意的：
+
+      deadline —— 截止时刻落在区间里，**或者已经过期还没交**。
+                  过期的永远列出来：选「今天」如果把上周没交的作业藏起来，
+                  「我还有哪些作业没交」这句就白问了。
+      日程     —— 和区间**有交集**，且还没结束。已经结束的不再列。
+
+    没有时间的条目不受区间限制（现在两条数据来路都不会产生这种条目，
+    这里只是不额外制造意外）。
     """
     if course_kw:
         hay = "".join(str(item.get(k) or "") for k in
@@ -121,16 +130,20 @@ def in_window(item, days=None, course_kw=None):
             return False
 
     now = datetime.now(timezone.utc)
-    if item.get("kind") == model.KIND_SCHEDULE:
-        end = model.parse_dt(item.get("end_at") or item.get("start_at"))
-        if end is not None and end < now:
-            return False
 
-    if days is not None:
-        t = model.parse_dt(item.get("due_at") or item.get("start_at"))
-        if t is not None and t > now + timedelta(days=days):
+    if item.get("kind") == model.KIND_SCHEDULE:
+        s = model.parse_dt(item.get("start_at"))
+        e = model.parse_dt(item.get("end_at")) or s
+        if e is not None and e < now:
             return False
-    return True
+        if span is None or s is None:
+            return True
+        return s < span[1] and e >= span[0]
+
+    t = model.parse_dt(item.get("due_at") or item.get("start_at"))
+    if t is None or t < now:
+        return True
+    return span is None or span[0] <= t < span[1]
 
 
 # ---------------------------------------------------------------- 页面
@@ -312,12 +325,23 @@ def api_manual_delete(item_id):
 # ---------------------------------------------------------------- 查询
 @app.post("/api/query")
 def api_query():
+    """取数。网页下拉列表和语音两条路在这里汇合。
+
+    网页（第一步）给的是 range / kind，值全是从下拉列表里选的；
+    语音（第二步）给 text，由 query.parse 归一成同一组条件。
+
+    返回里带上服务端**实际用的**区间和它的文字写法，页面照着显示，
+    这样"页面上写的筛选条件"和"真正生效的筛选条件"不会各说一套。
+    """
     body = request.get_json(silent=True) or {}
     text = (body.get("text") or "").strip()
-    days = body.get("days")
-    course = body.get("course_kw")
-    want_kind = body.get("kind")
+    kind = body.get("kind") or None
+    course = (body.get("course_kw") or "").strip() or None
+    range_id = str(body.get("range") or "").strip() or None
     force_refresh = bool(body.get("refresh"))
+
+    if kind not in (None,) + tuple(model.KINDS):
+        return jsonify({"ok": False, "error": f"不认识的问题类型：{kind}"}), 400
 
     parsed = None
     if text:
@@ -326,45 +350,50 @@ def api_query():
             return jsonify({"ok": True, "items": [], "parsed": parsed,
                             "demo": store.demo_on(),
                             "note": parsed["reason"], "help": q.HELP_TEXT})
-        if days is None:
-            days = parsed["days"]
-        if course is None:
-            course = parsed["course_kw"]
-        if not want_kind:
-            want_kind = parsed["want_kind"]
+        kind = kind or parsed["want_kind"]
+        course = course or parsed["course_kw"]
+
+    # 时间区间：下拉列表给的是"哪几天"，一句话给的是"从现在起多少天"
+    try:
+        if range_id:
+            span = q.resolve_range(range_id, body.get("start"), body.get("end"))
+            label = q.range_label(range_id)
+        elif parsed and parsed["days"] is not None:
+            span = q.span_from_days(parsed["days"])
+            label = f"未来 {parsed['days']} 天"
+        else:
+            span, label = None, "不限时间"
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
     if force_refresh:
         reset_cache()
 
     demo_on = store.demo_on()
-    items = []
     warning = None
 
     # 1) 本机存的：交我办日程 + 手动录入；演示模式下再叠上演示数据
     pool = list(store.all_items())
     if demo_on:
         pool += demo.items()
-    for it in pool:
-        if want_kind and it.get("kind") != want_kind:
-            continue
-        if in_window(it, days, course):
-            items.append(it)
+    cands = [it for it in pool if not kind or it.get("kind") == kind]
 
     # 2) Canvas：只贡献 deadline。
     #    演示模式下整段跳过——不联网，没网也能演示。
-    used_canvas = not demo_on and want_kind in (None, model.KIND_DEADLINE)
+    used_canvas = not demo_on and kind in (None, model.KIND_DEADLINE)
     if used_canvas:
-        cand, warning = canvas_deadlines()
-        for it in cand:
-            if in_window(it, days, course):
-                items.append(it)
+        got, warning = canvas_deadlines()
+        cands += got
+
+    items = model.sort_items([it for it in cands if in_window(it, span, course)])
 
     # cache_age 的含义是"这次回答用到的 Canvas 数据有多旧"，
     # 这次没碰 Canvas（演示模式、或者只问日程）时就该是空。
     age = cache_age() if used_canvas else None
-    items = model.sort_items(items)
     out = {"ok": True, "items": items, "parsed": parsed,
-           "count": len(items), "kind": want_kind,
+           "count": len(items), "kind": kind,
+           "range": range_id, "range_label": label,
+           "window": q.span_label(span),
            "demo": demo_on,
            "cache_age": round(age, 1) if age is not None else None}
     if warning:
