@@ -88,3 +88,6 @@ export CANVAS_TOKEN='你的令牌'                # 或者临时用环境变量
 
 更细的说明（三种装法、跨域那一跳为什么这么设计、缓存、演示模式）都在
 [`app/README.md`](app/README.md)。
+
+**让 AI agent 替你在 Windows 上跑一遍？** 把 [`WINDOWS.md`](WINDOWS.md) 给它——
+那是一份按步就班的执行清单，带着"期望结果 / 失败怎么办 / 交回什么"。
