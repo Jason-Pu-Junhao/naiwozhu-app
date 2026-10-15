@@ -18,6 +18,8 @@ __pycache__/
 out/preview/
 out/.lo/
 out/.mpl/
+# Windows 兼容性体检的报告与原始日志（tools/verify_windows.*）
+out/win-verify/
 out/server.log
 
 # Office 打开文件时留下的锁文件
