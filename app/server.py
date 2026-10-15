@@ -34,6 +34,10 @@ from ddl_service import DDLService
 from store import Store
 import query as q
 
+import console        # noqa: E402
+
+console.setup()
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 # 浏览器端的东西都在 tools/browser/：

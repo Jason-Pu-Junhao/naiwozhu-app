@@ -21,6 +21,14 @@ import os
 import sys
 import json
 
+# 复用 app/console.py 里那份修复：输出被重定向时切到 UTF-8，
+# 否则 Windows 上这里的 ⚠ 在 GBK 里编不出来会直接抛异常
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "..", "app"))
+import console        # noqa: E402
+
+console.setup()
+
 try:
     import requests
 except ImportError:

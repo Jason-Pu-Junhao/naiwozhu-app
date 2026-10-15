@@ -19,6 +19,10 @@ from canvas_client import CanvasClient, CanvasError
 from ddl_service import DDLService
 import query as q
 
+import console        # noqa: E402
+
+console.setup()
+
 C_RED, C_YEL, C_GRN, C_DIM, C_END = "\033[31m", "\033[33m", "\033[32m", "\033[2m", "\033[0m"
 
 

@@ -43,6 +43,15 @@ APP = os.path.join(ROOT, "app")
 OUT = os.path.join(ROOT, "out", "win-verify")
 RAW = os.path.join(OUT, "raw")
 
+# 复用 app/console.py 里那份修复：本脚本自己也要打印中文，
+# 重定向到文件时同样会踩 GBK 编不出字符的坑
+try:
+    sys.path.insert(0, APP)
+    import console                                    # noqa: E402
+    console.setup()
+except Exception:
+    pass
+
 SUITES = ["test_query.py", "test_ddl.py", "test_store.py", "test_server.py"]
 
 # 三种输出编码环境。第一种是"什么都不设"，也就是 Windows 上默认的样子。
@@ -51,11 +60,13 @@ SUITES = ["test_query.py", "test_ddl.py", "test_store.py", "test_server.py"]
 # 在任何系统上都会崩，所以它不计入失败总数，也不影响退出码。
 # 真正要看的是"默认"那一列在 Windows 上的结果。
 MODES = [
-    ("默认", {}, False, "不设任何编码变量，就是双击或在 cmd 里重定向时的样子"),
-    ("cp936", {"PYTHONIOENCODING": "gbk"}, True,
-     "模拟项：强行把输出编码按成 GBK，用来复现机制"),
+    ("默认", {}, False,
+     "什么都不设：重定向到文件或管道时就是 Windows 默认的样子。"
+     "app/console.py 修好之后，这里**应该**全过"),
+    ("关掉修复", {"PYTHONIOENCODING": "gbk", "NAIWOZHU_NO_UTF8": "1"}, True,
+     "模拟项：按死 GBK 且关掉 app/console.py 的自动修复，用来复现原始问题"),
     ("utf8", {"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}, False,
-     "推荐的修法：全面走 UTF-8"),
+     "另一条路：直接设 PYTHONUTF8=1"),
 ]
 
 # 会干扰结论的变量，跑测试前一律清掉
@@ -250,17 +261,17 @@ def step_tests():
     utf8_ok = all_ok("utf8")
     gbk_broken = not all_ok("cp936")
     if default_ok and utf8_ok:
-        add("T-sum", "测试在默认环境下就能跑", "PASS",
-            "这台机器的输出编码没问题")
+        add("T-sum", "默认环境下测试就能跑", "PASS",
+            "重定向时的编码问题已经由 app/console.py 自己解决，不需要设 PYTHONUTF8")
     elif utf8_ok and not default_ok:
         add("T-sum", "★默认环境会崩、UTF-8 环境正常", "FAIL",
-            "结论：需要 PYTHONUTF8=1（或换 UTF-8 代码页）才能跑测试")
+            "结论：要设 PYTHONUTF8=1，或者补上 app/console.py 那种自动修复")
     elif not utf8_ok:
         add("T-sum", "UTF-8 环境下仍有失败", "FAIL",
             "不是编码问题，看 out/win-verify/raw/ 里的原始日志")
     if gbk_broken:
-        add("T-gbk", "强制 GBK 会崩（机制复现）", "PASS",
-            "证明 ✓/✗ 这类字符在 GBK 下编不出来")
+        add("T-gbk", "关掉修复 + 强制 GBK 会崩", "PASS",
+            "机制复现：✓/✗ 在 GBK 下编不出来；关掉修复就复现，说明修复确实是它")
     return True
 
 
@@ -381,52 +392,70 @@ def step_server(port):
 
 # ---------------------------------------------------------------- ④ 中文字体
 FONT_PROBE = r'''
-import os, sys, warnings, json
+import os, sys, json, warnings
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib import font_manager, ft2font
 
+# 优先用项目自己的挑字体逻辑（src/fonts.py）——那才是真正生效的那份。
+# 发布出去的仓库只有 app/ 和 tools/，没有 src/，这时退回一份等价实现。
+SRC = os.path.join(os.getcwd(), "src")
+F = None
+if os.path.isdir(SRC):
+    sys.path.insert(0, SRC)
+    try:
+        import fonts as F
+    except Exception:
+        F = None
+
 CHARS = "奶我助工程学导论"
 
-def cover(path):
-    """每个字的字形索引；0 = 这个字体没有这个字。"""
-    try:
-        f = ft2font.FT2Font(path)
-        return {c: f.get_char_index(ord(c)) for c in CHARS}
-    except Exception as e:
-        return {"err": str(e)}
-
 def covers(path):
-    c = cover(path)
-    if "err" in c or not c:
+    if F is not None:
+        return F.covers(path, CHARS)
+    try:
+        f = ft2font.FT2Font(str(path))
+        idx = [f.get_char_index(ord(c)) for c in CHARS]
+    except Exception:
         return False
-    return all(v for v in c.values())
+    if not all(idx):
+        return False
+    return len(set(idx)) >= max(2, len(CHARS) // 2)
 
 def resolve(fam):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return font_manager.findfont(fam, fallback_to_default=True)
 
-out = {"configured": "Noto Sans CJK SC", "resolved": {}, "usable": []}
-for fam in ["Noto Sans CJK SC", "微软雅黑", "Microsoft YaHei", "SimHei",
-            "SimSun", "Source Han Sans SC", "Noto Sans CJK JP"]:
+cands = list(F.CANDIDATES_SANS) if F is not None else [
+    "Noto Sans CJK SC", "Microsoft YaHei", "SimHei", "SimSun"]
+out = {
+    "source": "src/fonts.py" if F is not None else "内置默认（这个仓库里没有 src/）",
+    "configured": F.CJK if F is not None else "",
+    "resolved": {}, "usable": [],
+}
+for fam in cands[:9]:
     p = resolve(fam)
     out["resolved"][fam] = {"path": os.path.basename(p), "covers": covers(p)}
-cfg = resolve(out["configured"])
-out["configured_path"] = os.path.basename(cfg)
-out["configured_covers"] = covers(cfg)
+
+if F is not None:
+    cfg = resolve(out["configured"])
+    out["configured_path"] = os.path.basename(cfg)
+    out["configured_covers"] = covers(cfg)
 
 seen = set()
 for f in font_manager.fontManager.ttflist:
-    p = f.fname
-    if p in seen:
+    if f.fname in seen:
         continue
-    seen.add(p)
-    if covers(p):
-        out["usable"].append(os.path.basename(p))
+    seen.add(f.fname)
+    if covers(f.fname):
+        out["usable"].append(os.path.basename(f.fname))
 out["usable"] = sorted(set(out["usable"]))[:40]
 print(json.dumps(out, ensure_ascii=False))
 '''
+
+
+
 
 
 def step_fonts():
@@ -450,11 +479,19 @@ def step_fonts():
         return False
 
     FACTS["fonts"] = info
-    cjk_ok = info["configured_covers"]
-    add("F1", "★项目配置的字体能打汉字", "PASS" if cjk_ok else "FAIL",
-        "src/style.py 写的是 %r，实到 %s，汉字字形%s" %
-        (info["configured"], info["configured_path"],
-         "齐全" if cjk_ok else "★缺失（图上中文会变成方框）"))
+    have_src = info.get("source") == "src/fonts.py"
+
+    if not have_src:
+        # 只发布了 app/ + tools/ 的仓库里没有配图脚本，这项无从谈起
+        add("F1", "★项目配置的字体能打汉字", "SKIP",
+            "这份仓库里没有 src/（配图脚本不在这里），字体这项跳过；"
+            "下面列出本机真能打汉字的字体供参考")
+    else:
+        cjk_ok = info.get("configured_covers")
+        add("F1", "★项目配置的字体能打汉字", "PASS" if cjk_ok else "FAIL",
+            "src/fonts.py 选中 %r（挑法：先按名字找、再验字形），实到 %s，汉字字形%s" %
+            (info.get("configured"), info.get("configured_path"),
+             "齐全" if cjk_ok else "★缺失（图上中文会变成方框）"))
 
     print("      各个候选字体在这台机器上实际落到哪个文件、能不能打汉字：")
     for fam, v in info["resolved"].items():
@@ -464,6 +501,10 @@ def step_fonts():
     add("F2", "这台机器上能打汉字的字体", "PASS" if usable else "WARN",
         "、".join(usable[:12]) + ("…" if len(usable) > 12 else "") if usable
         else "一个都没找到，说明系统没装中文字体")
+
+    if not have_src or not info.get("configured"):
+        add("F3", "样例配图生成", "SKIP", "同上：这份仓库里没有配图脚本，先不画")
+        return True
 
     # 生成一张样例图，让肉眼看一眼
     png = os.path.join(OUT, "sample-figure.png")
@@ -535,8 +576,8 @@ VERDICTS = [
      "网页版核心链路在 Windows 上通不通"),
     ("要不要设 PYTHONUTF8",
      lambda: any(r["id"] == "T-sum" and r["status"] == "FAIL" for r in RESULTS),
-     "要设：默认输出编码下测试会崩", "不用设：默认输出编码就能跑",
-     "四套测试在默认编码环境下会不会崩"),
+     "要设：默认输出编码下测试会崩", "不用设：代码自己会切 UTF-8",
+     "四套测试在默认（重定向）编码环境下会不会崩"),
     ("中文会不会变方框",
      lambda: any(r["id"] == "F1" and r["status"] == "FAIL" for r in RESULTS),
      "会：项目配置的字体缺汉字字形", "不会：字体有汉字字形",

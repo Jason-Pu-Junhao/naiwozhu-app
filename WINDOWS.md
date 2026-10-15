@@ -2,6 +2,9 @@
 
 > 读者是**在 Windows 上替你操作的 agent**。按顺序执行，每步都写了"期望结果"和"失败怎么办"。
 > 只允许创建/修改 `.venv\` 和 `out\` 里的东西；**不要改任何已入库的文件，不要 commit，不要 push**。
+>
+> 注意：下面这些 Windows 坑**已经修过了**（解释器路径、输出编码、配图字体、`.sh` 的 CRLF）。
+> 你的任务是**量出现在的真实状态**并交回报告，不是去修它们。
 
 ## 0. 确认位置（没克隆的话先克隆）
 
@@ -39,6 +42,17 @@ powershell -ExecutionPolicy Bypass -File tools\verify_windows.ps1
 | **`.venv` 是从 Linux 拷来的** | 加参数重跑：`... -RecreateVenv` |
 | **想快一点** | 加 `-SkipDocs`（跳过 matplotlib / python-docx / python-pptx） |
 
+## 1.5 平时怎么跑（不体检的时候）
+
+```powershell
+.\app\run.ps1 -Tests     # 跑四套测试（222 项）
+.\app\run.ps1            # 起网页版
+.\app\run.ps1 -Port 5199 -NoBrowser
+```
+
+这三个是 Windows 上一等公民的入口，解释器路径由脚本自己找（`.venv\Scripts\python.exe`）。
+输出编码也不用管：`app/console.py` 在输出被重定向到文件或管道时会自己切到 UTF-8。
+
 ## 2. 起网页版，打两次接口（可选，但建议做）
 
 ```powershell
@@ -66,8 +80,8 @@ Stop-Process -Id $p.Id
 
 ## 3. 不要做的事
 
-- **不要** 用 `bash app\run.sh` / `bash app\run_tests.sh`：里面写死了 `.venv/bin/python`（Linux 路径），
-  Windows 上必然失败。要跑测试就用第 1 步的脚本（它会用 `.venv\Scripts\python.exe`）。
+- **不要** 特意绕到 `bash app\run.sh` 去跑（Git Bash 里现在也能用，它会自己找
+  `.venv\Scripts\python.exe`，但没必要）：用第 1.5 步的 `.\app\run.ps1` 更直接。
 - **不要** 提交或外发 `app\config.local.json`（Canvas 令牌，等同密码）与 `app\data\`（真实数据）。
 - **不要** 为了让测试变绿去改 `app\` 下的代码（`✓ ✗ ⚠` 在 GBK 下报错是已知结论之一）。
 - **不要** 删 `out\win-verify\`，那是证据。
@@ -101,3 +115,4 @@ out\win-verify\verify-windows.log
 | 提示「这看起来不是 Windows」 | 确认用的是 Windows 的 PowerShell，不是 WSL / Git Bash |
 | `pip install` 失败（网络或代理） | 抄下 pip 报错原文，停在这里交回，不要反复重试 |
 | `out\win-verify\verify-windows.log` 没生成 | 说明测量脚本没跑起来；把终端里最后 20 行原文交回 |
+| 跑 `.sh` 脚本报 `$'\r': command not found` | 那是旧检出留下的 CRLF。`git rm --cached -r . ; git reset --hard` 重新检出即可（仓库里已有 `.gitattributes` 钉死 LF） |

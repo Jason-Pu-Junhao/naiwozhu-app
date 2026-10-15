@@ -34,6 +34,10 @@ class FakeResp:
 
 from canvas_client import CanvasClient
 
+import console        # noqa: E402
+
+console.setup()
+
 
 class FakeClient(CanvasClient):
     """继承真客户端、只覆写 _get。

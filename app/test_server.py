@@ -40,6 +40,10 @@ from model import CST, make_deadline            # noqa: E402
 import query as query_mod                       # noqa: E402
 import server                                  # noqa: E402
 
+import console        # noqa: E402
+
+console.setup()
+
 # /api/token 会往 app/config.local.json 里写字。
 # 那里面是你真实的 Canvas 令牌，测试**绝对不能**碰，
 # 所以把配置文件的位置也一起指到临时目录。

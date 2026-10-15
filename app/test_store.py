@@ -20,6 +20,10 @@ import model
 from store import Store
 import calendar_import
 
+import console        # noqa: E402
+
+console.setup()
+
 OK, BAD = 0, 0
 
 

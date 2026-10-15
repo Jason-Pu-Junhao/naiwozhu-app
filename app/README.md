@@ -200,6 +200,17 @@ python3 -m venv .venv
 
 也可以直接 `.venv/bin/python app/server.py`，效果和 `run.sh` 一样。
 
+**Windows**（解释器在 `.venv\Scripts\`，所以另有一份 PowerShell 入口）
+
+```powershell
+.\app\run.ps1                  # 起网页版
+.\app\run.ps1 -Port 5199 -NoBrowser
+.\app\run.ps1 -Tests           # 跑四套测试
+```
+
+`app/run.sh` 与 `app/run_tests.sh` 也会自己找解释器（先看 `.venv/Scripts/python.exe`、
+再看 `.venv/bin/python`），所以装了 Git Bash 的话那两个也能用；Windows 上直接跑 `.ps1` 更省事。
+
 ---
 
 ## 演示模式
@@ -348,10 +359,12 @@ const canAuto = hasGM || hasExt;    // 能自动推 → 挂面板；否则只能
 | `calendar_import.py` | 交我办导出的 JSON → 日程条目（字段名容错在这一层） |
 | `store.py` | 本地仓库：日历导入快照 + 手动录入 + 演示开关，按时间戳判新旧 |
 | `query.py` | 把输入规范化成查询条件：下拉列表的区间（`resolve_range`）、一句话的解析（`parse`），都是纯规则，不用大模型 |
+| `console.py` | 输出被重定向时把编码切成 UTF-8。不加的话 Windows 上 `✓ ✗ ⚠` 在 GBK 里编不出来，测试会以退出码 1 假失败 |
 | `cli.py` | 命令行入口 |
 | `server.py` | 本地网页服务（Flask）+ Canvas 查询缓存 |
 | `static/index.html` | 网页界面（原生 JS，无构建步骤） |
-| `run.sh` | 一键启动网页版 |
+| `run.sh` | 一键启动网页版（自动找 `.venv/Scripts` 或 `.venv/bin`） |
+| `run.ps1` | Windows 上的入口：`-Tests` 跑测试，其余同 `run.sh` |
 | `requirements.txt` | 运行期依赖，只有 Flask 和 requests |
 | `test_query.py` | 查询条件的 39 项用例：① 一句话的解析 19 项 ② 下拉列表的时间选项 20 项 |
 | `test_ddl.py` | 取数/去重/翻页的验证（19 项，用模拟数据） |
@@ -387,7 +400,12 @@ app/data/inbox/           把导出的 JSON 丢这里，再点「从收件箱导
 
 ```bash
 bash app/run_tests.sh          # 四套测试一起跑，共 222 项
+.\app\run.ps1 -Tests          # Windows 上等价的一条
 ```
+
+输出里的 `✓ ✗ ⚠` 走的是终端的编码：真终端里 Windows 用 WriteConsoleW 没问题，
+**重定向到文件或管道**时由 `console.py` 自动切 UTF-8，所以两种情况都不会假失败
+（想复现原始问题：设 `NAIWOZHU_NO_UTF8=1` 再重定向）。
 
 `test_ddl.py` 重点覆盖两件**最容易静默出错**的事：
 

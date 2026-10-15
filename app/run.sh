@@ -9,16 +9,27 @@
 set -e
 cd "$(dirname "$0")/.."
 
-PY=".venv/bin/python"
+# 解释器位置两边不一样：POSIX 在 .venv/bin/，Windows 在 .venv\Scripts\
+# （Git Bash 里也是后者）。挨个试，谁在就用谁。
+PY=""
+for cand in ".venv/Scripts/python.exe" ".venv/bin/python" ".venv/bin/python3"; do
+  if [ -x "$cand" ]; then PY="$cand"; break; fi
+done
 
-if [ ! -x "$PY" ]; then
+if [ -z "$PY" ]; then
   cat <<'EOF'
 没有找到 .venv（项目自带的 Python 环境）。
 
 先建一个，只需要做一次：
 
-    python3 -m venv .venv
-    .venv/bin/pip install -r app/requirements.txt
+    Linux / macOS / Git Bash:
+        python3 -m venv .venv
+        .venv/bin/pip install -r app/requirements.txt
+
+    Windows（直接用 PowerShell 那份脚本更省事）:
+        py -3 -m venv .venv
+        .venv\Scripts\python.exe -m pip install -r app\requirements.txt
+        .\app\run.ps1
 
 然后重新跑这个脚本。
 EOF

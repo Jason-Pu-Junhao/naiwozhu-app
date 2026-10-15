@@ -13,6 +13,10 @@ from datetime import datetime
 from model import CST
 from query import parse, resolve_range, span_from_days, RANGES
 
+import console        # noqa: E402
+
+console.setup()
+
 # (输入, 是否应为查询, 期望天数, 期望课程)
 CASES = [
     # ---- 正常查询 ----

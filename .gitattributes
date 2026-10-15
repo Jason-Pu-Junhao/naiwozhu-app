@@ -1,0 +1,10 @@
+# 换行符策略
+#
+# 为什么需要：Git for Windows 默认 core.autocrlf=true，会把 .sh 检出成 CRLF，
+# 于是 Git Bash / WSL 里跑起来会报 `$'\r': command not found`。
+# （在真机上量到过：Windows 11 上 app/run.sh 检出为 CRLF。）
+#
+# 脚本一律留 LF；Windows 那份 .ps1 也用 LF，PowerShell 5.1 认。
+*.sh   text eol=lf
+*.ps1  text eol=lf
+*.py   text eol=lf
