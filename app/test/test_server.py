@@ -16,7 +16,7 @@
 所以这套测试**不会碰到你真实的日历和手动记录**。
 
 运行：
-    .venv/bin/python app/test_server.py
+    .venv/bin/python app/test/test_server.py
 """
 import io
 import json
@@ -27,8 +27,9 @@ import tempfile
 import zipfile
 from datetime import datetime, timedelta
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))          # app/test/
+APP = os.path.dirname(HERE)                                # app/
+sys.path.insert(0, APP)
 
 # 必须在 import server 之前设：server 一被导入就会建 Store()
 _TMP = tempfile.mkdtemp(prefix="naiwozhu-test-")
@@ -292,8 +293,17 @@ def main():
 
         print("\n时间范围（下拉列表）")
         # 时间窗必须**相对"现在"**构造：写死日期过几天就跑不过了。
-        # "今天"用一条"正在进行的日程"来表示，这样不管几点跑都成立。
+        #
+        # 但"正在进行"的一段日程在**临近午夜**时会跨过午夜——那时它确实同时落在
+        # 今天和明天的窗口里（in_window 判得对，是"今天只有它"这个假设不对）。
+        # 所以把锚点日程**夹在当天之内**；离午夜不足一分钟时它已经结束，那条断言跳过。
         now = datetime.now(CST)
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = now.replace(hour=23, minute=59, second=0, microsecond=0)
+        anchor_end = min(now + timedelta(minutes=55), day_end)
+        anchor_start = max(min(now - timedelta(minutes=5), anchor_end - timedelta(minutes=1)),
+                           day_start)
+        anchor_ongoing = anchor_end > now      # 23:59 之后跑，它已经结束了
 
         def at(days, hour=12):
             d = (now + timedelta(days=days)).replace(hour=hour, minute=0,
@@ -305,8 +315,8 @@ def main():
             "calendars": {"my": [{"id": 11, "name": "我的日程"}]},
             "events": [
                 {"eventId": 21, "calendarId": 11, "title": "正在进行的日程",
-                 "startTime": (now - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M"),
-                 "endTime": (now + timedelta(minutes=55)).strftime("%Y-%m-%d %H:%M")},
+                 "startTime": anchor_start.strftime("%Y-%m-%d %H:%M"),
+                 "endTime": anchor_end.strftime("%Y-%m-%d %H:%M")},
                 {"eventId": 22, "calendarId": 11, "title": "明天的日程",
                  "startTime": at(1), "endTime": at(1, 13)},
                 {"eventId": 23, "calendarId": 11, "title": "十天后的日程",
@@ -327,7 +337,10 @@ def main():
         t = lambda r: [i["title"] for i in r["items"]]        # noqa: E731
 
         _, r = q("", range="today")
-        check("「今天」带上正在进行的日程", "正在进行的日程" in t(r), t(r))
+        if anchor_ongoing:
+            check("「今天」带上正在进行的日程", "正在进行的日程" in t(r), t(r))
+        else:
+            print("      （离午夜不足一分钟，锚点日程已经结束，这条跳过）")
         check("「今天」挡掉明天的日程", "明天的日程" not in t(r), t(r))
         check("「今天」挡掉十天后的日程", "十天后的日程" not in t(r), t(r))
         check("★「今天」仍然列出已经过期还没交的作业",

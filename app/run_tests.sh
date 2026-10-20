@@ -18,13 +18,13 @@ if [ -z "$PY" ]; then
 fi
 
 echo "=========== 查询解析用例 ==========="
-"$PY" app/test_query.py
+"$PY" app/test/test_query.py
 echo
 echo "=========== 取数/翻页/去重验证 ==========="
-"$PY" app/test_ddl.py
+"$PY" app/test/test_ddl.py
 echo
 echo "=========== 交我办导入 + 两种日期类型 ==========="
-"$PY" app/test_store.py
+"$PY" app/test/test_store.py
 echo
 echo "=========== 网页服务：接口 / 演示模式 / 缓存 ==========="
-"$PY" app/test_server.py
+"$PY" app/test/test_server.py

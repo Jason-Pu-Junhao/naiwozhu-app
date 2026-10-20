@@ -53,6 +53,7 @@ except Exception:
     pass
 
 SUITES = ["test_query.py", "test_ddl.py", "test_store.py", "test_server.py"]
+TEST_DIR = os.path.join(APP, "test")          # 用例都在 app/test/ 下
 
 # 三种输出编码环境。第一种是"什么都不设"，也就是 Windows 上默认的样子。
 #
@@ -230,7 +231,7 @@ def step_tests():
     for mode, env, simulated, why in MODES:
         print("\n  ── %s：%s" % (mode, why))
         for suite in SUITES:
-            path = os.path.join(APP, suite)
+            path = os.path.join(TEST_DIR, suite)
             if not os.path.exists(path):
                 add("T-%s-%s" % (mode, suite), suite, "SKIP", "文件不在")
                 continue

@@ -38,7 +38,7 @@ if ($Tests) {
     $bad = 0
     foreach ($s in $suites) {
         Write-Host "=========== $s ==========="
-        & $py (Join-Path $repo "app\$s")
+        & $py (Join-Path $repo "app\test\$s")
         if ($LASTEXITCODE -ne 0) { $bad++ }
     }
     Write-Host ""

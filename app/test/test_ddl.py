@@ -4,13 +4,13 @@
   1. 翻页 —— 漏翻会少拿作业，程序却不报错
   2. 去重 —— todo 与逐课程查询会返回同一条作业
 
-运行： .venv/bin/python app/test_ddl.py
+运行： .venv/bin/python app/test/test_ddl.py
 """
 import os
 import sys
 from datetime import datetime, timezone, timedelta
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ddl_service import DDLService, _is_done, _remaining
 
 CST = timezone(timedelta(hours=8))

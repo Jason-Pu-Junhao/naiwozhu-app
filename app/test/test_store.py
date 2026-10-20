@@ -7,14 +7,14 @@
   · 时间戳新旧判断（旧文件不许覆盖新数据）
   · 手动录入必须显式说明类型
 运行：
-    .venv/bin/python app/test_store.py
+    .venv/bin/python app/test/test_store.py
 """
 import os
 import shutil
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import model
 from store import Store

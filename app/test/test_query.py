@@ -1,4 +1,4 @@
-"""查询条件的用例。运行： .venv/bin/python app/test_query.py
+"""查询条件的用例。运行： .venv/bin/python app/test/test_query.py
 
 这个文件同时是"答辩时可以现场跑"的证据：
 说明"否定句/说法变化"这个难点是被系统性验证过的，不是拍脑袋写的规则。
@@ -8,7 +8,7 @@
   ② 下拉列表的时间选项 → 时间区间（网页走这条）
 """
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datetime import datetime
 from model import CST
 from query import parse, resolve_range, span_from_days, RANGES

@@ -366,11 +366,11 @@ const canAuto = hasGM || hasExt;    // 能自动推 → 挂面板；否则只能
 | `run.sh` | 一键启动网页版（自动找 `.venv/Scripts` 或 `.venv/bin`） |
 | `run.ps1` | Windows 上的入口：`-Tests` 跑测试，其余同 `run.sh` |
 | `requirements.txt` | 运行期依赖，只有 Flask 和 requests |
-| `test_query.py` | 查询条件的 39 项用例：① 一句话的解析 19 项 ② 下拉列表的时间选项 20 项 |
-| `test_ddl.py` | 取数/去重/翻页的验证（21 项，用模拟数据） |
-| `test_store.py` | 交我办导入 + 两种类型的 46 项验证（用模拟数据） |
-| `test_server.py` | 网页服务层 122 项：接口形状、按条件取数、时间范围、外部依赖挂了怎么办、演示模式、缓存、浏览器端分发（用假的 Canvas） |
-| `testdata/sample_calendar_export.json` | 伪造的示例导出文件，用来离线验证导入链路 |
+| `test/test_query.py` | 查询条件的 39 项用例：① 一句话的解析 19 项 ② 下拉列表的时间选项 20 项 |
+| `test/test_ddl.py` | 取数/去重/翻页的验证（21 项，用模拟数据） |
+| `test/test_store.py` | 交我办导入 + 两种类型的 46 项验证（用模拟数据） |
+| `test/test_server.py` | 网页服务层 122 项：接口形状、按条件取数、时间范围、外部依赖挂了怎么办、演示模式、缓存、浏览器端分发（用假的 Canvas） |
+| `test/testdata/sample_calendar_export.json` | 伪造的示例导出文件，用来离线验证导入链路 |
 
 浏览器端的东西都在 `../tools/browser/`，见那里的 README：
 
@@ -407,21 +407,21 @@ bash app/run_tests.sh          # 四套测试一起跑，共 228 项
 **重定向到文件或管道**时由 `console.py` 自动切 UTF-8，所以两种情况都不会假失败
 （想复现原始问题：设 `NAIWOZHU_NO_UTF8=1` 再重定向）。
 
-`test_ddl.py` 重点覆盖两件**最容易静默出错**的事：
+`test/test_ddl.py` 重点覆盖两件**最容易静默出错**的事：
 
 - **翻页**：Canvas 默认每页只返回 10 条，漏翻会少拿作业而**程序不报错**。
   测试用两页的模拟数据验证 `Link` 头被正确跟随。
 - **去重**：`/users/self/todo` 和「逐课程查 assignments」会返回同一条作业，
   合并时按 id 去重，并记录它来自哪些渠道。
 
-`test_store.py` 覆盖导入链路的三个易错点：
+`test/test_store.py` 覆盖导入链路的三个易错点：
 
 - **字段名容错**：交我办接口没有公开文档，`startTime` / `start_time` /
   `allDay` / `all_day` 这些写法都试一遍。
 - **时间戳新旧**：拖进一个旧的备份文件时，**不许**覆盖掉更新的数据。
 - **类型必填**：手动录入缺类型 / 缺时间都要报错。
 
-`test_server.py` 覆盖前几套完全没碰过的服务层。它把 Canvas 客户端换成假的，
+`test/test_server.py` 覆盖前几套完全没碰过的服务层。它把 Canvas 客户端换成假的，
 所以**不联网**也能跑，重点盯五件事：
 
 - **演示模式真的离线**：开着的时候断言假客户端被调用 0 次。
