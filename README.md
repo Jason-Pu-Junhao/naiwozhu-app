@@ -11,6 +11,9 @@
 | `tools/browser/` | 交我办同步脚本（一份代码，三种装法）+ 自带的 Chrome 扩展 |
 | `tools/verify_windows.py` `.ps1` | Windows 兼容性体检 |
 | `tools/canvas_check.py` | Canvas 令牌自检 |
+| `tools/sync_smoke.py` | 两台机器同步的验收脚本 |
+| `SYNC.md` | 两台机器（电脑 + 树莓派）怎么配、怎么同步 |
+| `API.md` | 接口清单：写日程、查日程与 ddl、条目结构 |
 
 课程文档（项目建议书、答辩 PPT、小组分工、学习路线）不在这里。
 
@@ -41,8 +44,10 @@ Windows 上有两处要注意（体检脚本会逐条量出来）：
    `.venv/bin/python` 不一样，所以 `app/run.sh` 与 `app/run_tests.sh` 里写死的路径
    在 Windows 上无效——要么用 Git Bash / WSL 跑，要么直接敲
    `.venv\Scripts\python.exe app\server.py`。
-2. **输出编码**：测试打印的 `✓ ✗ ⚠` 不在 GBK 里，**重定向或管道输出时**会抛
-   `UnicodeEncodeError`（退出码 1，看起来像测试失败）。设 `set PYTHONUTF8=1` 即可。
+2. **输出编码**：测试打印的 `✓ ✗ ⚠` 不在 GBK 里，早期**重定向或管道输出时**会抛
+   `UnicodeEncodeError`（退出码 1，看起来像测试失败）。现在 `app/console.py` 会把
+   重定向后的输出自动切成 UTF-8，**不用再设 `PYTHONUTF8=1`**
+   （想复现原始问题：设 `NAIWOZHU_NO_UTF8=1`）。
 
 > 这个仓库里没有 `src/`（生成 Word 与配图的脚本），所以体检报告里
 > 「生成 Word」和字体那两步会显示成**跳过**，属正常，不用管。
@@ -53,11 +58,12 @@ Windows 上有两处要注意（体检脚本会逐条量出来）：
 python3 -m venv .venv
 .venv/bin/pip install -r app/requirements.txt
 
-bash app/run_tests.sh     # 四套测试，共 222 项
+bash app/run_tests.sh     # 五套测试，共 402 项
 bash app/run.sh           # 起网页版，默认 http://127.0.0.1:5173
 ```
 
-浏览器打开 <http://127.0.0.1:5173>。只监听本机回环地址，不对外网开放。
+浏览器打开 <http://127.0.0.1:5173>。默认只监听本机回环地址；要让手机或另一台机器
+访问，用 `--host 0.0.0.0` 并**先设一个访问口令**——没有口令时它拒绝启动，不会裸奔。
 
 ---
 
@@ -76,6 +82,22 @@ export CANVAS_TOKEN='你的令牌'                # 或者临时用环境变量
 
 两条都配最好，只配一条也能用。**一条都没配也进得去**：页头右上角有个「演示数据」开关，
 点开就用编好的数据演示，不联网。
+
+---
+
+## 两台机器（电脑 + 树莓派）
+
+数据在电脑和树莓派各存一份，连上同一个局域网时互相补齐新的那部分；
+任何一台单独都能回答"我还有哪些作业没交"。配置步骤、同步规则、校园网排错
+都在这三份里：
+
+- [`SYNC.md`](SYNC.md) —— 怎么配、怎么同步、连不上怎么查
+- [`API.md`](API.md) —— 要接语音前端时调什么接口
+- `tools/sync_smoke.py` —— 起两个隔离实例跑一遍完整流程
+
+```bash
+.venv/bin/python tools/sync_smoke.py      # 本机模拟两台
+```
 
 ---
 

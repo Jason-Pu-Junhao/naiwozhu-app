@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File tools\verify_windows.ps1
 ## 1.5 平时怎么跑（不体检的时候）
 
 ```powershell
-.\app\run.ps1 -Tests     # 跑四套测试（222 项）
+.\app\run.ps1 -Tests     # 跑五套测试（391 项）
 .\app\run.ps1            # 起网页版
 .\app\run.ps1 -Port 5199 -NoBrowser
 ```
@@ -85,6 +85,8 @@ Stop-Process -Id $p.Id
 - **不要** 提交或外发 `app\config.local.json`（Canvas 令牌，等同密码）与 `app\data\`（真实数据）。
 - **不要** 为了让测试变绿去改 `app\` 下的代码（`✓ ✗ ⚠` 在 GBK 下报错是已知结论之一）。
 - **不要** 删 `out\win-verify\`，那是证据。
+- **不要** 拿 `--host 0.0.0.0` 起服务做体检：那会把接口暴露到局域网，
+  并且必须有访问口令才肯启动。体检一律用默认的只监听本机。
 
 ## 4. 交回什么
 
@@ -106,6 +108,16 @@ Stop-Process -Id $p.Id
 out\win-verify\AGENT-REPORT.md
 out\win-verify\verify-windows.log
 ```
+
+## 4.5 两台机器（Windows 电脑 + 树莓派）
+
+这一份只管「Windows 上能不能跑」。两台机器怎么同步、口令怎么配、校园网
+为什么连不上，都在仓库根目录的 [`SYNC.md`](SYNC.md)。
+
+Windows 侧要额外记住两点：
+
+- 监听地址用 `-BindHost`（`$Host` 是 PowerShell 的只读自动变量，不能拿来当参数名）；
+- 地址写 `http://树莓派IP:5173`，Windows 上别用 `.local` 去猜主机名。
 
 ## 5. 其它意外
 
