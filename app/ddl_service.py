@@ -46,6 +46,10 @@ class DDLService:
         self.c = client
         self.verbose = verbose
         self._course_cache = None
+        # 这一轮里哪些课程没取到（网络抖动、被移出课程、403……）。
+        # 调用方据此判断"这次是不是一次完整的抓取"：只有完整的才该
+        # 覆盖已存的缓存，否则一次部分失败会把别的课程从缓存里抹掉。
+        self.skipped = []
 
     # ------------------------------------------------------------ 课程名
     def course_map(self):
@@ -83,7 +87,10 @@ class DDLService:
         for cid in list(cmap.keys()):
             try:
                 assignments = self.c.course_assignments(cid)
-            except Exception as e:
+            except Exception as e:                # noqa: BLE001
+                self.skipped.append({"course_id": cid,
+                                     "course": cmap.get(cid, ""),
+                                     "error": f"{type(e).__name__}: {e}"[:200]})
                 if self.verbose:
                     print(f"    [跳过] 课程 {cid}: {e}")
                 continue

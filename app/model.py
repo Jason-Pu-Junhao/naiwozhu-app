@@ -30,6 +30,14 @@ SRC_MANUAL = "手动录入"
 # 给人看的类型名
 KIND_LABEL = {KIND_DEADLINE: "截止", KIND_SCHEDULE: "日程"}
 
+# 派生字段：它们是从时间字段**现算**出来的，不是事实。
+#
+# 存盘和同步包里都不该有它们——"还有 3 天"这种东西一旦落盘，第二天就是错的。
+# 所以在写盘前 strip_derived，读出来后再 decorate。（真机上报过：导入后过一周，
+# 页面上 75 条条目的徽章文字全是导入那天算出来的。）
+DERIVED = ("remaining", "overdue", "when_local", "due_local",
+           "start_local", "end_local")
+
 
 # ---------------------------------------------------------------- 时间工具
 def parse_dt(s):
@@ -178,6 +186,64 @@ def make_schedule(item_id, title, start_at, end_at, source, *, all_day=False,
     if extra:
         rec.update(extra)
     return rec
+
+
+# ------------------------------------------------- 事实层 / 显示层
+def strip_derived(item):
+    """去掉派生字段，只留下事实。写盘和放进同步包之前用它。"""
+    if not isinstance(item, dict):
+        return item
+    return {k: v for k, v in item.items() if k not in DERIVED}
+
+
+def decorate(item):
+    """补齐派生字段。从磁盘或同步包读出来的条目，出门前都要过这一道。
+
+    重算一遍、不信存着的值，是因为"还剩多久"取决于**现在**。
+    """
+    if not isinstance(item, dict):
+        return item
+    rec = dict(item)
+
+    if rec.get("kind") == KIND_DEADLINE:
+        due = parse_dt(rec.get("due_at"))
+        rem, over = remaining(due)
+        rec["remaining"] = rem
+        rec["overdue"] = over
+        rec["due_local"] = fmt(due)
+        rec["when_local"] = fmt(due)
+        return rec
+
+    if rec.get("kind") == KIND_SCHEDULE:
+        start = parse_dt(rec.get("start_at"))
+        end = parse_dt(rec.get("end_at"))
+        state, ended = schedule_state(start, end)
+        rec["remaining"] = state
+        rec["overdue"] = ended
+        rec["start_local"] = fmt(start)
+        rec["end_local"] = fmt(end)
+        rec["when_local"] = when_local(start, end, bool(rec.get("all_day")))
+        return rec
+
+    # 不认识的类型：原样返回，不替它编造字段
+    return rec
+
+
+def rec_key(rec):
+    """同步裁决用的全序键：(更新时间, 修订号, 设备号)。
+
+    时间戳只当第一顺位：两台机器的时钟一旦不一致，光看时间会静默丢数据。
+    rev 在同一台设备内单调递增，device_id 让"完全相同"也有确定答案，
+    所以合并结果不依赖两边谁先算——这是"一次往返就收敛"的前提。
+    """
+    if not isinstance(rec, dict):
+        return (datetime.min.replace(tzinfo=timezone.utc), 0, "")
+    t = parse_dt(rec.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        rev = int(rec.get("rev") or 0)
+    except (TypeError, ValueError):
+        rev = 0
+    return (t, rev, str(rec.get("device_id") or ""))
 
 
 # ---------------------------------------------------------------- 排序

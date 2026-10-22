@@ -169,6 +169,7 @@
   .status{margin:12px 0 0 30px;font-size:13px;color:var(--gray)}
   .status b{color:var(--ink)}
   .status.ok{color:#2E7D5B}
+  .status.bad{color:#A33B2A}
   .tk{display:flex;gap:8px;margin:12px 0 0 30px}
   .tk input{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:7px;outline:none}
   .tk input:focus{border-color:var(--navy)}
@@ -184,6 +185,26 @@
 
   footer{max-width:720px;margin:0 auto;padding:0 24px 60px;
          font-size:12px;color:#B4BBC5}
+
+  /* 两台机器同步：配置页的一小块 + 主界面的一行提示 */
+  .syncbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+           font-size:12.5px;color:var(--faint);margin:2px 0 6px;min-height:18px}
+  .syncbar .ghost{padding:4px 10px;font-size:12.5px}
+  .syncbar .bad{color:#A33B2A}
+
+  /* 访问口令浮层：从别的机器打开时才会出现 */
+  .keygate{position:fixed;inset:0;background:rgba(15,26,46,.55);
+           display:flex;align-items:center;justify-content:center;z-index:99}
+  .keygate[hidden]{display:none}
+  .keybox{background:#fff;border-radius:12px;padding:24px 26px;max-width:420px;
+          box-shadow:0 18px 50px rgba(0,0,0,.25)}
+  .keybox h3{margin:0 0 10px;font-size:17px;color:var(--navy)}
+  .keybox p{margin:0 0 14px;font-size:13px;color:var(--gray);line-height:1.7}
+  .keybox input{width:100%;padding:9px 12px;border:1px solid var(--line);
+                border-radius:7px;outline:none;margin-bottom:10px}
+  .keybox input:focus{border-color:var(--navy)}
+  .keybox button{width:100%;padding:10px;border-radius:7px;background:var(--navy);
+                 color:#fff;font-weight:600;font-size:14px}
 </style>
 </head>
 <body>
@@ -348,6 +369,37 @@
     <div class="status" id="tokenStatus"></div>
   </div>
 
+  <!-- ③ 两台机器 -->
+  <div class="step">
+    <div class="step-h">
+      <span class="num">3</span>
+      <h2>两台机器同步</h2>
+      <span class="opt">选填 · 只有一台机器就不用管</span>
+    </div>
+    <p>
+      电脑和树莓派各存一份数据，连上同一个 WiFi 时互相补上对方新的那部分。
+      两边都填对方的地址，口令填同一个。
+    </p>
+
+    <div class="tk">
+      <input id="syncPeer" placeholder="对端地址，例如 http://192.168.1.23:5173" autocomplete="off">
+      <button id="syncSave">保存</button>
+    </div>
+    <div class="tk">
+      <input id="syncKey" type="password" placeholder="访问口令（两台填一样）" autocomplete="off">
+      <button id="syncKeyBtn" title="生成一个新口令并保存">生成</button>
+    </div>
+    <div class="tk">
+      <input id="syncInterval" placeholder="自动同步间隔（秒），0 = 只在数据变了时同步" autocomplete="off">
+      <button id="syncNow">立即同步</button>
+    </div>
+    <div class="status" id="syncStatus"></div>
+    <div class="tip" style="margin-top:10px">
+      地址可以用局域网 IP，也可以用 <code>主机名.local</code>。
+      路由器最好给树莓派留一个固定地址，免得它换 IP 之后这边找不到。
+    </div>
+  </div>
+
   <div class="start">
     <button id="startBtn" disabled>进入 →</button>
     <span id="startHint">需要先导入一份交我办日历 JSON</span>
@@ -388,6 +440,11 @@
 
   <div class="note" id="note"></div>
 
+  <div class="syncbar" id="syncBar" hidden>
+    <span id="syncHint"></span>
+    <button class="ghost" id="syncMiniBtn" title="现在就同步一次">同步</button>
+  </div>
+
   <div class="addform" id="addForm" hidden>
     <div class="seg" id="kindSeg">
       <button data-kind="deadline" class="on">截止</button>
@@ -406,7 +463,21 @@
   <div class="list" id="list"></div>
 </div>
 
-<footer>只监听本机 127.0.0.1，令牌不出你的电脑</footer>
+<footer id="foot">只监听本机 127.0.0.1，令牌不出你的电脑</footer>
+
+<!-- 从别的机器打开时才会出现：这一页本身能加载，但 /api/ 要求带口令 -->
+<div class="keygate" id="keyGate" hidden>
+  <div class="keybox">
+    <h3>需要一个访问口令</h3>
+    <p>
+      你是从局域网访问 <b id="keyHost">这台机器</b> 的。它只对带口令的访问开放，
+      口令在跑服务的那台机器的设置页里（在那台机器本机打开则不需要口令）。
+    </p>
+    <input id="keyInput" type="password" placeholder="粘贴访问口令…" autocomplete="off">
+    <button id="keyBtn">验证并记住</button>
+    <div class="status" id="keyMsg" style="margin-left:0"></div>
+  </div>
+</div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -417,7 +488,9 @@ const state = {
   kind: 'all',       // 问题下拉列表：all / 日程 / deadline
   items: [],
   expanded: false,
-  hasData: false,    // 交我办 JSON 是否已导入过
+  hasData: false,    // 首次配置是否已完成
+  calCount: 0,       // 交我办快照里有多少条（同步过来的也算）
+  noKey: false,      // 是不是因为没带访问口令而被挡在外面
 };
 let manualKind = 'deadline';
 
@@ -445,6 +518,72 @@ function fmtClock(ms){
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/* ============================================================ 访问口令
+   在跑服务的那台机器上打开不需要口令（服务端对回环地址放行）。
+   从手机或另一台机器打开时，每个 /api/ 请求都要带 X-Access-Key，
+   口令只存在这个浏览器里，不写进页面。 */
+const KEY_STORE = 'naiwozhu_access_key';
+function accessKey(){ return localStorage.getItem(KEY_STORE) || ''; }
+function setAccessKey(v){
+  if (v) localStorage.setItem(KEY_STORE, v);
+  else localStorage.removeItem(KEY_STORE);
+}
+
+/** 所有接口请求都走这里：自动带口令，401 时弹出输入框。 */
+async function api(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers || {});
+  const k = accessKey();
+  if (k) headers['X-Access-Key'] = k;
+  const r = await fetch(path, Object.assign({}, opts, {headers}));
+  if (r.status === 401) showKeyGate();
+  return r;
+}
+
+function showKeyGate(){
+  const g = $('#keyGate');
+  if (!g || !g.hidden) return;
+  $('#keyHost').textContent = location.host;
+  g.hidden = false;
+  setTimeout(() => { try { $('#keyInput').focus(); } catch (e) {} }, 60);
+}
+
+$('#keyBtn').onclick = async () => {
+  const v = $('#keyInput').value.trim();
+  if (!v) return;
+  const r = await fetch('/api/status', {headers: {'X-Access-Key': v}});
+  if (!r.ok) { $('#keyMsg').textContent = '口令不对，再试一次。'; return; }
+  setAccessKey(v);
+  // 顺手写个 cookie：页面里直接点链接跳转时也能带上
+  document.cookie = 'naiwozhu_key=' + encodeURIComponent(v)
+                  + ';path=/;max-age=31536000;SameSite=Lax';
+  $('#keyGate').hidden = true;
+  location.reload();
+};
+$('#keyInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#keyBtn').click();
+});
+
+// 支持 ?key=xxx 直接进来（方便从另一台机器发个链接），用完从地址栏抹掉
+{
+  const q = new URLSearchParams(location.search);
+  const k = q.get('key');
+  if (k) {
+    setAccessKey(k);
+    q.delete('key');
+    const qs = q.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+}
+
+// 页脚先按地址栏给个说法。等 /api/status 回来再用服务端的口径覆盖——
+// 否则从局域网打开、又还没过口令时，页脚会一直写着"只监听本机"。
+{
+  const f = $('#foot');
+  const local = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(location.host);
+  if (f && !local) f.textContent = '局域网访问，要带口令；令牌不出这台机器';
+}
+
 /* ============================================================ 视图切换 */
 let watchTimer = null;
 
@@ -454,8 +593,9 @@ function startSetupWatch(){
   if (watchTimer) return;
   watchTimer = setInterval(async () => {
     let s;
-    try { s = await (await fetch('/api/status')).json(); }
+    try { s = await (await api('/api/status')).json(); }
     catch (e) { return; }               // 服务没响应就下一轮再试
+    if (s && s.ok === false) return;    // 没口令就别空转
     if (!s.configured && !s.demo) return;
     stopSetupWatch();
     state.hasData = !!s.configured;
@@ -477,8 +617,9 @@ function showView(name){
   if (setup) {
     stopSetupWatch();
     loadStatus().then(s => {
-      // 已经有数据就没必要盯；进配置页只是想改设置
-      if (!s.configured && !s.demo) startSetupWatch();
+      // 已经有数据就没必要盯；进配置页只是想改设置。
+      // 没带口令时也别盯——轮询只会一直 401。
+      if (!state.noKey && !s.configured && !s.demo) startSetupWatch();
     });
   } else {
     stopSetupWatch();
@@ -495,7 +636,7 @@ function applyDemo(on, banner){
   if (on) b.textContent = banner || '演示模式：以下数据是编的，没有联网。';
 }
 $('#demoChk').onchange = async e => {
-  const r = await fetch('/api/demo', {method:'POST',
+  const r = await api('/api/demo', {method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({on: e.target.checked})});
   const d = await r.json();
@@ -507,8 +648,15 @@ $('#demoChk').onchange = async e => {
 
 /* ============================================================ 状态 */
 async function loadStatus(){
-  const s = await (await fetch('/api/status')).json();
+  const s = await (await api('/api/status')).json();
+  if (!s || s.ok === false) {          // 多半是 401，口令浮层已经弹出来了
+    state.noKey = true;
+    showKeyGate();
+    return {configured:false, demo:false};
+  }
+  state.noKey = false;
   state.hasData = !!s.configured;
+  state.calCount = ((s.calendar || {}).count) || 0;
   applyDemo(s.demo, s.demo_banner);
   $('#inboxPath').textContent = s.inbox || '—';
   $('#extDir').textContent = s.extension_dir || '（找不到扩展目录）';
@@ -540,6 +688,15 @@ async function loadStatus(){
     $('#tokenRow').hidden = false;
   }
 
+  const foot = $('#foot');
+  if (foot) {
+    const bind = s.bind || {};
+    foot.textContent = bind.loopback_only
+      ? '只监听本机 127.0.0.1，令牌不出你的电脑'
+      : `监听 ${bind.host}:${bind.port}，局域网访问要带口令；令牌不出这台机器`;
+  }
+
+  refreshSyncPanel(s);
   checkReady();
   return s;
 }
@@ -550,9 +707,110 @@ function checkReady(){
   $('#startHint').textContent = ready
     ? ($('#demoChk').checked && !state.hasData
         ? '演示模式已打开，可以直接进去看'
-        : '交我办日历已接上，可以进去了')
+        : (state.calCount
+            ? '交我办日历已接上，可以进去了'
+            : '已经配好了，可以进去（交我办日程要等第一次同步之后才有）'))
     : '需要先导入一份交我办日历 JSON';
 }
+
+/* ============================================================ 两台机器同步 */
+async function refreshSyncPanel(s){
+  if (!s) return;
+  const sy = s.sync || {};
+  const st = sy.state || {};
+
+  if (document.activeElement !== $('#syncPeer')) $('#syncPeer').value = sy.peer || '';
+  if (document.activeElement !== $('#syncInterval'))
+    $('#syncInterval').value = (sy.interval == null ? 300 : sy.interval);
+
+  const el = $('#syncStatus');
+  if (el) {
+    if (!sy.peer && !st.last_attempt) {
+      el.className = 'status';
+      el.textContent = '还没配。两台各填对方的地址、口令填同一个，就会自动同步。';
+    } else if (st.last_ok) {
+      const skew = st.skew_seconds;
+      el.className = 'status ok';
+      el.innerHTML = `✅ 上次同步 <b>${esc(fmtTs(st.last_attempt))}</b>，`
+        + `对端设备 <b>${esc(st.peer_device || '—')}</b>`
+        + (skew != null && Math.abs(skew) > 300
+            ? `　⚠ 两台时间差约 ${Math.round(Math.abs(skew) / 60)} 分钟，`
+              + `建议都打开自动校时` : '');
+    } else {
+      el.className = 'status bad';
+      el.textContent = (st.last_attempt ? fmtTs(st.last_attempt) + '　' : '')
+        + (st.last_error || '同步没成');
+    }
+  }
+
+  const bar = $('#syncBar'), hint = $('#syncHint');
+  if (bar && hint) {
+    bar.hidden = !sy.peer;
+    if (sy.peer) {
+      const ok = !!st.last_ok;
+      hint.className = ok ? '' : 'bad';
+      hint.textContent = ok
+        ? `已同步 · ${fmtTs(st.last_attempt)}`
+        : (st.last_attempt ? `同步失败 · ${(st.last_error || '').slice(0, 40)}`
+                           : '还没同步过');
+    }
+  }
+}
+
+async function saveSyncSettings(payload){
+  const r = await api('/api/sync/settings', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)});
+  let d = {};
+  try { d = await r.json(); } catch (e) { d = {ok:false, error:'返回的不是 JSON'}; }
+  const el = $('#syncStatus');
+  if (!d.ok) {
+    if (el) { el.className = 'status bad'; el.textContent = d.error || '没保存上'; }
+    return null;
+  }
+  if (d.access_key) {
+    setAccessKey(d.access_key);          // 刚设的口令顺手存进这个浏览器
+    $('#syncKey').value = d.access_key;
+  }
+  await loadStatus();
+  return d;
+}
+
+$('#syncSave').onclick = () => saveSyncSettings({
+  peer: $('#syncPeer').value.trim(),
+  interval: String($('#syncInterval').value.trim() || '0'),
+});
+
+$('#syncKeyBtn').onclick = async () => {
+  const d = await saveSyncSettings({generate_key: true});
+  const el = $('#syncStatus');
+  if (d && d.access_key && el) {
+    el.className = 'status ok';
+    el.innerHTML = '✅ 口令已生成并填进上面一格，另一台机器要填同一个：<br>'
+      + `<code style="word-break:break-all">${esc(d.access_key)}</code>`;
+  }
+};
+
+async function clickSync(){
+  const btns = [$('#syncNow'), $('#syncMiniBtn')];
+  btns.forEach(b => { if (b) b.disabled = true; });
+  const el = $('#syncStatus');
+  if (el) { el.className = 'status'; el.textContent = '正在同步…'; }
+  try {
+    const r = await api('/api/sync/now', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if (!d.ok && el) { el.className = 'status bad'; el.textContent = d.error || '同步没成'; }
+    await loadStatus();
+    if (!$('#mainView').hidden) loadList();
+  } catch (e) {
+    if (el) { el.className = 'status bad'; el.textContent = '同步请求失败：' + e; }
+  } finally {
+    btns.forEach(b => { if (b) b.disabled = false; });
+  }
+}
+$('#syncNow').onclick = clickSync;
+$('#syncMiniBtn').onclick = clickSync;
 
 /* ============================================================ 列表 */
 function badge(it){
@@ -612,7 +870,7 @@ listEl.addEventListener('click', async e => {
   if (!a) return;
   e.preventDefault();
   if (!confirm('删掉这条手动记录？')) return;
-  const r = await fetch('/api/manual/' + encodeURIComponent(a.dataset.del), {method:'DELETE'});
+  const r = await api('/api/manual/' + encodeURIComponent(a.dataset.del), {method:'DELETE'});
   const d = await r.json();
   if (!d.ok) alert(d.error || '删除失败');
   loadList();
@@ -627,6 +885,8 @@ function noteFor(d, extra){
   bits.push(extra);
   if (d.demo) bits.push('演示数据');
   else if (d.cache_age != null) bits.push(`Canvas 数据更新于 ${fmtClock(Date.now() - d.cache_age*1000)}`);
+  // 抓不到时服务端会回一段带"缓存"字样的警告，这里只说清数据是哪来的
+  if (d.canvas_source === 'disk_peer' && !d.warning) bits.push('Canvas 数据来自另一台机器');
   if (d.warning) bits.push(`⚠ ${d.warning}`);
   return {text: bits.filter(Boolean).join('　'), warn: !!d.warning};
 }
@@ -650,7 +910,7 @@ async function loadList(refresh){
   noteEl.innerHTML = '正在取数据…';
   listEl.innerHTML = '';
   try{
-    const r = await fetch('/api/query', {method:'POST',
+    const r = await api('/api/query', {method:'POST',
       headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const text = await r.text();
     let d;
@@ -765,7 +1025,7 @@ $('#mAdd').onclick = async () => {
     body.start = when; body.end = $('#mEnd').value || null;
     if (extra) body.location = extra;
   }
-  const r = await fetch('/api/manual', {method:'POST',
+  const r = await api('/api/manual', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const d = await r.json();
   if (!d.ok) { alert(d.error || '添加失败'); return; }
@@ -786,7 +1046,7 @@ $('#mAdd').onclick = async () => {
 async function importPayload(payload, filename){
   noteEl.className = 'note';
   noteEl.textContent = '正在导入…';
-  const r = await fetch('/api/import', {method:'POST',
+  const r = await api('/api/import', {method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({payload, filename})});
   const d = await r.json();
@@ -821,7 +1081,7 @@ drop.addEventListener('drop', e => {
   if (f) readAndImport(f);
 });
 $('#scanBtn').onclick = async () => {
-  const r = await fetch('/api/import', {method:'POST',
+  const r = await api('/api/import', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({scan:true})});
   const d = await r.json();
   await loadStatus();
@@ -830,7 +1090,7 @@ $('#scanBtn').onclick = async () => {
 };
 $('#copyScript').onclick = async () => {
   const box = $('#codeBox');
-  const d = await (await fetch('/api/export-script')).json();
+  const d = await (await api('/api/export-script')).json();
   if (!d.ok) { alert(d.error || '取不到脚本'); return; }
   try{
     await navigator.clipboard.writeText(d.code);
@@ -851,7 +1111,7 @@ $('#tokenBtn').onclick = async () => {
   if (!tok) return;
   const btn = $('#tokenBtn'); btn.disabled = true; btn.textContent = '验证中…';
   try{
-    const r = await fetch('/api/token', {method:'POST',
+    const r = await api('/api/token', {method:'POST',
       headers:{'Content-Type':'application/json'}, body: JSON.stringify({token: tok})});
     const d = await r.json();
     if (d.ok) {

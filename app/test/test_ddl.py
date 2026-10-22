@@ -180,6 +180,32 @@ def main():
     rem, over = _remaining(None)
     ok &= check("无截止时间不报错", rem == "—")
 
+    # ---- 某门课取不到时，要能说出"这次不完整" ----
+    # 逐课程查询里单门课失败是被吞掉的（continue）。吞掉没问题，
+    # 但上层要能知道"这一轮不是一次干净的完整抓取"，
+    # 否则一次部分失败会把别的课程的缓存抹掉，看起来像作业凭空消失。
+    print("\n单门课失败时记下来")
+
+    class OneCourseFails(FakeClient):
+        def course_assignments(self, course_id):
+            if course_id == 1:
+                raise CanvasError("403 无权限访问")
+            return super().course_assignments(course_id)
+
+    svc_partial = DDLService(OneCourseFails())
+    items_partial = svc_partial.pending()
+    ok &= check("★失败的那门课被记进 skipped",
+                len(svc_partial.skipped) == 1
+                and svc_partial.skipped[0]["course_id"] == 1,
+                svc_partial.skipped)
+    ok &= check("记下了原因", "403" in svc_partial.skipped[0]["error"],
+                svc_partial.skipped[0].get("error"))
+    ok &= check("★另一门课的作业照常返回",
+                any(i["title"] == "阅读文献" for i in items_partial),
+                [i["title"] for i in items_partial])
+    ok &= check("全部成功时 skipped 是空的",
+                DDLService(FakeClient()).skipped == [])
+
     # ---- 回归：网络失败与非 JSON 响应都必须变成 CanvasError ----
     # 真机上踩过：Canvas 连不上时抛的是 requests.ConnectionError，
     # 漏到 Flask 就变成 500 的 HTML 页，前端只显示"JSON.parse 失败"。

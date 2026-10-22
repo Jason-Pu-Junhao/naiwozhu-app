@@ -405,17 +405,57 @@ def main():
         resp = c.post("/api/query", json={"kind": model.KIND_DEADLINE})
         check("★Canvas 连不上时不再返回 500", resp.status_code == 200, resp.status_code)
         r = resp.get_json()
-        # 注意：本机记录（交我办 + 手动录入）照常显示，所以 items 不一定为空；
-        # 要断言的是"没有任何一条来自 Canvas"，以及把原因说清楚
+        # 行为说明：Canvas 抓不到时，现在会拿"上次成功抓到的缓存"顶上，
+        # 但必须把这件事说清楚。这条断言以前是"没有任何一条来自 Canvas"——
+        # 那时候 Canvas 一点都不落盘，抓不到就真的什么都没有；加了磁盘缓存之后，
+        # "有数据、但标明是多久前的"比"什么都没有"更有用，断言跟着改成新契约。
         check("★而是 200 + 一句警告",
-              r is not None and bool(r.get("warning"))
-              and all(i.get("source") != model.SRC_CANVAS
-                      for i in (r.get("items") or [])),
-              str(r)[:100])
+              r is not None and bool(r.get("warning")), str(r)[:100])
         check("警告里说明是 Canvas 取不到",
               "Canvas" in (r or {}).get("warning", ""), (r or {}).get("warning"))
-        check("出错不写进缓存",
+        check("★抓不到时顶上的是上次成功的缓存",
+              (r or {}).get("canvas_source") == "disk_local",
+              (r or {}).get("canvas_source"))
+        check("★并且标出缓存有多旧（秒）",
+              isinstance((r or {}).get("canvas_stale_seconds"), int),
+              (r or {}).get("canvas_stale_seconds"))
+        check("★缓存里的作业仍然列出来（不因为一次失败就消失）",
+              any(i.get("source") == model.SRC_CANVAS for i in (r.get("items") or [])),
+              [i.get("id") for i in (r.get("items") or [])])
+        check("出错不写进内存缓存",
               c.get("/api/status").get_json()["cache_age"] is None)
+        server.DDLService = FakeDDLService
+        server.reset_cache()
+
+        print("\n抓不到之后先安静一会儿（别每次查询都重新等超时）")
+        # 树莓派连着没有出口的热点时，每问一次都重新去连 = 每问一次卡 5–25 秒。
+        # 失败之后短时间内直接用缓存回答，这是实机上能不能用的关键。
+        class CountingBoom:
+            calls = 0
+
+            def __init__(self, client, verbose=False):
+                pass
+
+            def pending(self, *a, **kw):
+                CountingBoom.calls += 1
+                raise requests.exceptions.ConnectionError("boom")
+
+        server.DDLService = CountingBoom
+        server.reset_cache()
+        outs = [c.post("/api/query", json={"kind": model.KIND_DEADLINE}).get_json()
+                for _ in range(3)]
+        check("★连着问三次，只去打了一次网络", CountingBoom.calls == 1,
+              CountingBoom.calls)
+        check("★另外两次照样有结果（用缓存）",
+              all(o.get("canvas_source") == "disk_local" for o in outs),
+              [o.get("canvas_source") for o in outs])
+        check("★三次都带着警告，没有假装成功",
+              all(bool(o.get("warning")) for o in outs))
+
+        c.post("/api/query", json={"kind": model.KIND_DEADLINE, "refresh": True})
+        check("★点「刷新」会立刻重试一次（不被退让挡住）",
+              CountingBoom.calls == 2, CountingBoom.calls)
+
         server.DDLService = FakeDDLService
         server.reset_cache()
 
@@ -487,6 +527,205 @@ def main():
         check("返回了姓名", r.get("name") == "测试用户", r)
         check("令牌写进的是临时配置",
               os.path.exists(server.config.LOCAL_CFG))
+
+        print("\n局域网访问与访问口令")
+        # environ_base 换掉 REMOTE_ADDR，就能模拟"从另一台机器访问"。
+        # 注意：上面的请求都是回环来的，所以配置里一直没有口令。
+        LAN = {"REMOTE_ADDR": "192.168.50.7"}
+        r = c.get("/api/status", environ_base=LAN)
+        check("★局域网上还没设口令 → 403（宁可不服务）", r.status_code == 403,
+              r.status_code)
+        check("并且说明原因", "口令" in (r.get_json() or {}).get("error", ""),
+              r.get_json())
+
+        check("页面本身不拦（否则没机会提示输口令）",
+              c.get("/", environ_base=LAN).status_code == 200)
+
+        key = server.config.save_access_key("test-access-key-0123456789")
+        check("能生成并保存访问口令", key == "test-access-key-0123456789", key)
+
+        r = c.get("/api/status", environ_base=LAN)
+        check("★有口令但没带 → 401", r.status_code == 401, r.status_code)
+        check("并且告诉前端要口令",
+              (r.get_json() or {}).get("need_key") is True, r.get_json())
+
+        r = c.get("/api/status", environ_base=LAN, headers={"X-Access-Key": "wrong"})
+        check("口令不对 → 401", r.status_code == 401, r.status_code)
+
+        r = c.get("/api/status", environ_base=LAN, headers={"X-Access-Key": key})
+        check("★口令对了 → 200", r.status_code == 200, r.status_code)
+        s2 = r.get_json()
+        check("状态里说清这台机器怎么被访问的",
+              (s2.get("bind") or {}).get("loopback_only") is True
+              and (s2.get("access") or {}).get("has_key") is True, s2.get("bind"))
+
+        check("口令也能用查询参数带",
+              c.get("/api/status?key=" + key, environ_base=LAN).status_code == 200)
+        check("本机访问不需要口令", c.get("/api/status").status_code == 200)
+        check("静态的脚本也不拦",
+              c.get("/naiwozhu.user.js", environ_base=LAN).status_code == 200)
+
+        print("\n同步接口")
+        import sync as sync_mod
+        bundle = sync_mod.build_bundle(server.store)
+        blob = json.dumps(bundle, ensure_ascii=False)
+        check("★同步包里没有 Canvas 令牌",
+              "whatever" not in blob, blob[:80])
+        check("★同步包里没有访问口令", key not in blob)
+
+        r = c.post("/api/sync", json=bundle)
+        d = r.get_json()
+        check("自环同步返回 200", r.status_code == 200, r.status_code)
+        flat = [v if isinstance(v, str) else v.get("added", 0) + v.get("updated", 0)
+                + v.get("deleted", 0) for v in d["changes"].values()]
+        check("★自环同步什么都没变（幂等）",
+              all(v in ("kept", 0) for v in flat), d["changes"])
+        check("回包里带着合并后的包", isinstance(d.get("bundle"), dict))
+
+        check("坏包被拒（400）",
+              c.post("/api/sync", json={"hi": "there"}).status_code == 400)
+        check("版本不认识被拒（400）",
+              c.post("/api/sync", json={"schema": 999, "manual": []}).status_code == 400)
+
+        r = c.post("/api/sync/now", json={})
+        d = r.get_json()
+        check("没配对端地址时明确报错",
+              r.status_code == 400 and "对端地址" in (d.get("error") or ""), d)
+
+        check("地址没写 http:// 被拒",
+              c.post("/api/sync/settings",
+                     json={"peer": "192.168.1.9:5173"}).status_code == 400)
+
+        # 保存地址会顺便起后台同步线程。测试里把它换成假的：
+        # 不真的去连 192.168.1.9，但能验证"调用了它"。
+        real_start = server.start_sync_thread
+        started = []
+        server.start_sync_thread = lambda *a, **k: started.append((a, k))
+        try:
+            r = c.post("/api/sync/settings", json={"peer": "http://192.168.1.9:5173"})
+            d = r.get_json()
+            check("能保存对端地址",
+                  d.get("ok") and d.get("peer") == "http://192.168.1.9:5173", d)
+            check("状态里能看到对端地址",
+                  c.get("/api/status").get_json()["sync"]["peer"]
+                  == "http://192.168.1.9:5173")
+            check("★保存地址后会顺手开始自动同步（不用重启）",
+                  bool(started), started)
+            check("间隔不是整数被拒",
+                  c.post("/api/sync/settings",
+                         json={"interval": "abc"}).status_code == 400)
+            check("能保存间隔",
+                  c.post("/api/sync/settings",
+                         json={"interval": 120}).get_json().get("interval") == 120)
+        finally:
+            server.start_sync_thread = real_start
+
+        print("\n接口契约（协作者依赖的东西不许悄悄变）")
+        # 新增字段可以，删字段/改形状不行。这一段就是那道闸。
+        got = server.canvas_deadlines()
+        check("★canvas_deadlines() 仍然返回 (items, warning) 两个值",
+              isinstance(got, tuple) and len(got) == 2, type(got))
+
+        r = c.post("/api/query", json={"kind": model.KIND_DEADLINE}).get_json()
+        for k in ("ok", "items", "parsed", "count", "kind", "range",
+                  "range_label", "window", "demo", "cache_age"):
+            check(f"/api/query 仍然有 {k}", k in r, sorted(r))
+        check("/api/query 的 items 仍是条目列表", isinstance(r["items"], list))
+        if r["items"]:
+            it = r["items"][0]
+            for k in ("kind", "id", "title", "source", "remaining", "overdue",
+                      "when_local"):
+                check(f"条目仍然有 {k}", k in it, sorted(it))
+
+        s = c.get("/api/status").get_json()
+        for k in ("has_token", "base", "token_source", "help", "kinds",
+                  "calendar", "inbox", "manual_count", "has_export_script",
+                  "extension_dir", "has_extension", "extension_zip",
+                  "configured", "demo", "demo_banner", "demo_count",
+                  "cache_ttl", "cache_age"):
+            check(f"/api/status 仍然有 {k}", k in s, sorted(s))
+        for k in ("imported_at", "exported_at", "filename", "count", "stats"):
+            check(f"calendar 状态里仍然有 {k}", k in s["calendar"], sorted(s["calendar"]))
+
+        check("★store.manual_items() 不带参数照样能用",
+              isinstance(server.store.manual_items(), list))
+        check("store.add_manual 的参数没变（kind/title + 关键字）",
+              "kind" in server.store.add_manual.__code__.co_varnames
+              and "title" in server.store.add_manual.__code__.co_varnames)
+
+        print("\n首次配置的判定（树莓派那种情况）")
+        os.remove(server.store.cal_path)
+        s3 = c.get("/api/status").get_json()
+        check("★没有交我办快照、但有令牌且有对端 → 也算配置好了",
+              s3["configured"] is True, s3["configured"])
+
+        print("\nCanvas 落到磁盘、没令牌时顶上")
+        now = datetime.now(CST)
+        mine = server.store.device_id()
+        item = make_deadline("cv-disk-1", "缓存里的作业", now + timedelta(days=2),
+                             model.SRC_CANVAS, sources=["测试"])
+        server.store.save_canvas(now, [item], fetch_ok=True, origin_device=mine)
+        check("canvas.json 写下去了",
+              c.get("/api/status").get_json()["canvas"]["meta"]["count"] == 1)
+
+        real_load = server.config.load
+        server.config.load = lambda: dict(real_load(), token="", source="测试")
+        try:
+            server.reset_cache()
+            r = c.post("/api/query", json={"kind": model.KIND_DEADLINE}).get_json()
+            check("★本机没令牌时用磁盘缓存回答",
+                  r.get("canvas_source") == "disk_local", r.get("canvas_source"))
+            check("并且说清是缓存",
+                  "缓存" in (r.get("warning") or ""), r.get("warning"))
+            check("缓存里的作业列出来了",
+                  "缓存里的作业" in [i.get("title") for i in r.get("items") or []],
+                  [i.get("title") for i in r.get("items") or []])
+            check("还报出缓存有多旧",
+                  isinstance(r.get("canvas_stale_seconds"), int),
+                  r.get("canvas_stale_seconds"))
+
+            server.store.save_canvas(now, [item], fetch_ok=True,
+                                     origin_device="ffffffff")
+            server.reset_cache()
+            r = c.post("/api/query", json={"kind": model.KIND_DEADLINE}).get_json()
+            check("★缓存来自另一台机器时标明来源",
+                  r.get("canvas_source") == "disk_peer", r.get("canvas_source"))
+        finally:
+            server.config.load = real_load
+            server.reset_cache()
+
+        print("\n只拿到一部分课程时（别把没取到的课从缓存里抹掉）")
+        # 某门课取不到（403 / 网络抖一下）时，整次抓取并不是"干净的成功"。
+        # 这种结果可以拿来回答，但不该覆盖上次完整的那份快照——
+        # 否则那门课的作业会凭空消失，看起来像"交了"。
+        class PartialDDL:
+            def __init__(self, client, verbose=False):
+                self.skipped = [{"course_id": 11, "course": "高等数学",
+                                 "error": "CanvasError: 403 无权限"}]
+
+            def pending(self, *a, **kw):
+                return [make_deadline("cv-partial-1", "只拿到这门课的作业",
+                                      now + timedelta(days=1), model.SRC_CANVAS,
+                                      sources=["测试"])]
+
+        real_ddl = server.DDLService
+        server.DDLService = PartialDDL
+        try:
+            server.reset_cache()
+            r = c.post("/api/query", json={"kind": model.KIND_DEADLINE}).get_json()
+            check("部分成功也照样给出结果",
+                  "只拿到这门课的作业" in [i.get("title") for i in r.get("items") or []],
+                  [i.get("title") for i in r.get("items") or []])
+            check("★并说明可能有课没取到",
+                  "可能不全" in (r.get("warning") or ""), r.get("warning"))
+            snap = server.store.canvas_snapshot()
+            check("★没有覆盖磁盘上那份完整的缓存",
+                  [i.get("title") for i in snap.get("items") or []]
+                  == ["缓存里的作业"],
+                  [i.get("title") for i in snap.get("items") or []])
+        finally:
+            server.DDLService = real_ddl
+            server.reset_cache()
 
     finally:
         shutil.rmtree(_TMP, ignore_errors=True)

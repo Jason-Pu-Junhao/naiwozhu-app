@@ -10,7 +10,7 @@
 它在真机上量四件事：
 
   ① 环境事实：系统版本、控制台代码页、locale、换行符、解释器路径、路径里有没有中文
-  ② 四套测试在**三种输出编码环境下各跑一遍**，看哪一套会崩
+  ② 五套测试在**三种输出编码环境下各跑一遍**，看哪一套会崩
      （默认 / 强制 GBK / UTF-8 修法）——这样"是不是编码问题、修法有没有用"
      是同一次运行里对比出来的，不靠推理
   ③ 起一次真服务、打几次真接口，确认网页那条链路在 Windows 上通
@@ -52,7 +52,8 @@ try:
 except Exception:
     pass
 
-SUITES = ["test_query.py", "test_ddl.py", "test_store.py", "test_server.py"]
+SUITES = ["test_query.py", "test_ddl.py", "test_store.py",
+          "test_server.py", "test_sync.py"]
 TEST_DIR = os.path.join(APP, "test")          # 用例都在 app/test/ 下
 
 # 三种输出编码环境。第一种是"什么都不设"，也就是 Windows 上默认的样子。
@@ -226,7 +227,7 @@ def step_env():
 
 # ---------------------------------------------------------------- ② 测试 × 编码
 def step_tests():
-    hr("② 四套测试 × 三种输出编码环境")
+    hr("② 五套测试 × 三种输出编码环境")
     table = {}
     for mode, env, simulated, why in MODES:
         print("\n  ── %s：%s" % (mode, why))
@@ -587,7 +588,7 @@ VERDICTS = [
     ("要不要设 PYTHONUTF8",
      lambda: any(r["id"] == "T-sum" and r["status"] == "FAIL" for r in RESULTS),
      "要设：默认输出编码下测试会崩", "不用设：代码自己会切 UTF-8",
-     "四套测试在默认（重定向）编码环境下会不会崩"),
+     "五套测试在默认（重定向）编码环境下会不会崩"),
     ("中文会不会变方框",
      lambda: any(r["id"] == "F1" and r["status"] == "FAIL" for r in RESULTS),
      "会：项目配置的字体缺汉字字形",
@@ -691,7 +692,7 @@ def main():
     ap = argparse.ArgumentParser(description="奶我助 · Windows 兼容性体检")
     ap.add_argument("--skip-server", action="store_true", help="跳过起服务那一步")
     ap.add_argument("--skip-docs", action="store_true", help="跳过生成 Word 那一步")
-    ap.add_argument("--skip-tests", action="store_true", help="跳过四套测试")
+    ap.add_argument("--skip-tests", action="store_true", help="跳过五套测试")
     ap.add_argument("--port", type=int, default=0, help="服务端口，0=自动挑一个空的")
     args = ap.parse_args()
 

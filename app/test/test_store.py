@@ -207,6 +207,93 @@ def main():
         check("删完只剩 3 条", len(st.manual_items()) == 3)
         check("删不存在的报错", st.delete_manual("manual-999")["ok"] is False)
 
+        print("\n设备号与同步用的元信息")
+        did = st.device_id()
+        check("设备号是 8 位十六进制",
+              len(did) == 8 and all(c in "0123456789abcdef" for c in did), did)
+        check("设备号会落盘并复用", Store(data_dir=tmp).device_id() == did)
+        check("手动条目 id 里带设备号", d2["id"] == f"manual-{did}-3", d2["id"])
+        check("手动条目带 updated_at / rev / device_id / deleted",
+              all(k in d2 for k in ("updated_at", "rev", "device_id", "deleted")),
+              sorted(d2))
+
+        print("\n派生字段不落盘、读的时候现算")
+        raw = st._read(st.cal_path) or {}
+        check("★磁盘上的日历条目没有 remaining",
+              all("remaining" not in i for i in (raw.get("items") or [])))
+        check("★读出来又有（按现在重算）",
+              all(i.get("remaining") for i in st.calendar_items()))
+        past = {
+            "kind": model.KIND_DEADLINE, "id": f"manual-{did}-99", "title": "上周该交的",
+            "source": model.SRC_MANUAL, "course": "", "html_url": "",
+            "due_at": "2020-01-01T00:00:00+08:00", "sources": ["手动录入"],
+            "updated_at": "2020-01-01T00:00:00+08:00", "rev": 1,
+            "device_id": did, "deleted": False,
+            # 故意写一个旧值，看读的时候会不会照抄
+            "remaining": "还有 99 天", "overdue": False,
+        }
+        st.upsert_manual_records([past])
+        got = [i for i in st.manual_items() if i["id"] == past["id"]][0]
+        check("★存着旧值也会按现在重算", got["remaining"].startswith("已过期"),
+              got["remaining"])
+        check("★过期标记也跟着重算", got["overdue"] is True)
+
+        print("\n删除留墓碑")
+        graves = st.manual_items(include_deleted=True)
+        grave = [i for i in graves if i["id"] == d["id"]][0]
+        check("墓碑还在文件里", grave.get("deleted") is True)
+        check("墓碑的 rev 比原来大", int(grave["rev"]) == 2, grave["rev"])
+        check("★默认列表里看不到它",
+              d["id"] not in [i["id"] for i in st.manual_items()])
+
+        print("\n合并条目时逐条取新")
+        newer = dict(past, updated_at="2027-01-01T00:00:00+08:00", title="新标题")
+        older = dict(past, updated_at="2019-01-01T00:00:00+08:00", title="旧标题")
+        st.upsert_manual_records([newer])
+        st.upsert_manual_records([older])
+        got = [i for i in st.manual_items() if i["id"] == past["id"]][0]
+        check("★更旧的不会覆盖更新的", got["title"] == "新标题", got["title"])
+
+        print("\nCanvas 缓存")
+        cv_item = model.make_deadline("cv-1", "缓存里的作业",
+                                      model.parse_dt("2026-12-01T23:59"),
+                                      model.SRC_CANVAS, sources=["测试"])
+        st.save_canvas("2026-10-20T10:00:00+08:00", [cv_item],
+                       fetch_ok=True, origin_device=did)
+        check("canvas.json 写下去了", st.canvas_meta()["count"] == 1)
+        check("抓取时间记下来了",
+              st.canvas_meta()["fetched_at"] == "2026-10-20T10:00:00+08:00")
+        check("来源设备记下来了", st.canvas_meta()["origin_device"] == did)
+        check("读出来带派生字段", bool(st.canvas_items()[0].get("remaining")))
+        raw_cv = st._read(st.canvas_path) or {}
+        check("★canvas 写盘也没有派生字段",
+              all(k not in raw_cv["items"][0] for k in model.DERIVED))
+
+        print("\n整份替换日历（同步用）")
+        st.replace_calendar("2026-12-31T00:00:00+08:00", [
+            {"kind": model.KIND_SCHEDULE, "id": "cal-sync-1", "title": "同步来的日程",
+             "source": model.SRC_CALENDAR, "start_at": "2026-12-30T10:00:00+08:00",
+             "end_at": "2026-12-30T11:00:00+08:00", "all_day": False},
+        ], source_device="abcd1234")
+        check("整份换掉了", len(st.calendar_items()) == 1)
+        check("标注了来源设备", st.calendar_meta()["source_device"] == "abcd1234")
+        check("换完还是能算出派生字段",
+              bool(st.calendar_items()[0].get("when_local")))
+
+        print("\n旧格式 id 会被迁移")
+        legacy = Store(data_dir=os.path.join(tmp, "legacy"))
+        legacy._write(legacy.manual_path, {"seq": 2, "items": [
+            {"kind": model.KIND_DEADLINE, "id": "manual-1", "title": "老条目",
+             "source": model.SRC_MANUAL, "due_at": "2026-12-01T23:59:00+08:00",
+             "created_at": "2026-10-01T00:00:00+08:00"},
+        ]})
+        migrated = legacy.manual_items()
+        check("★旧 id 被改成带设备号的",
+              migrated[0]["id"].startswith(f"manual-{legacy.device_id()}-"),
+              migrated[0]["id"])
+        check("迁移后补上了同步用的字段",
+              all(k in migrated[0] for k in ("device_id", "rev")), sorted(migrated[0]))
+
         print("\n坏文件")
         check("不是 JSON 对象会被拒",
               st.import_payload([1, 2, 3])["ok"] is False)

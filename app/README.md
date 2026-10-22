@@ -3,7 +3,8 @@
 在本地网页上用**两个下拉列表**选条件——看哪一段时间、问日程还是任务——列出你还没交的作业
 和接下来的安排。**这一步不碰语音**，只做两件事：把数据拿到、把流程跑通。
 
-> 项目整体进度与关键决策不在这一份里，在仓库根目录的 [`PROJECT.md`](../PROJECT.md)。
+> 这份是单机网页版的说明。两台机器怎么同步见 [`../SYNC.md`](../SYNC.md)，
+> 接口清单见 [`../API.md`](../API.md)。
 
 一条命令起来：
 
@@ -347,29 +348,59 @@ const canAuto = hasGM || hasExt;    // 能自动推 → 挂面板；否则只能
 
 ---
 
+## 两台机器（电脑 + 树莓派）
+
+数据在电脑和树莓派各存一份，连上同一个 WiFi 时互相补齐新的那部分。
+讲清配置步骤、同步规则、校园网坑和排错的整份文档在仓库根目录：
+[`SYNC.md`](../SYNC.md)。
+
+最短路径（五分钟）：
+
+```bash
+# 电脑：先生成一个访问口令（设置页「3 两台机器同步」→ 生成）
+bash app/run.sh
+
+# 树莓派：带上同一个口令，监听局域网
+NAIWOZHU_ACCESS_KEY='那串口令' \
+  .venv/bin/python app/server.py --host 0.0.0.0
+
+# 两边各填对方的地址，然后点「立即同步」
+```
+
+三条规则先知道就够了：
+
+- **交我办日程只在电脑上导入**。树莓派没有浏览器里那个登录态，它的课表是同步过去的。
+- **Canvas 两边各用自己的令牌抓**。所以电脑关机时，树莓派照样答得出"我还有哪些作业没交"；
+  抓不到就用上次的缓存，并在页面上说清是多久前的。
+- **手动加的条目两端都能改、都能删**，删掉的那条不会被另一端送回来。
+
+---
+
 ## 文件说明
 
 | 文件 | 作用 |
 |---|---|
 | `model.py` | **两种日期类型的数据模型**，网页版和语音版共用 |
 | `demo.py` | 演示数据：按当前时间现算的假数据，覆盖两种类型和三种时间状态 |
-| `config.py` | 读取令牌：环境变量优先，其次 `config.local.json` |
+| `config.py` | 读取令牌 / 访问口令 / 对端地址：环境变量优先，其次 `config.local.json` |
 | `canvas_client.py` | Canvas REST API 客户端（认证 + **自动翻页**） |
 | `ddl_service.py` | Canvas → deadline：汇总未交作业、去重、排序 |
 | `calendar_import.py` | 交我办导出的 JSON → 日程条目（字段名容错在这一层） |
-| `store.py` | 本地仓库：日历导入快照 + 手动录入 + 演示开关，按时间戳判新旧 |
+| `store.py` | 本地仓库：日历导入快照 + 手动录入 + Canvas 缓存 + 演示开关；设备号、墓碑、进程内加锁 |
+| `sync.py` | 两台机器的同步：组包、合并（纯函数）、落地、推给对端。合并规则见仓库根目录 `SYNC.md` |
 | `query.py` | 把输入规范化成查询条件：下拉列表的区间（`resolve_range`）、一句话的解析（`parse`），都是纯规则，不用大模型 |
 | `console.py` | 输出被重定向时把编码切成 UTF-8。不加的话 Windows 上 `✓ ✗ ⚠` 在 GBK 里编不出来，测试会以退出码 1 假失败 |
 | `cli.py` | 命令行入口 |
-| `server.py` | 本地网页服务（Flask）+ Canvas 查询缓存 |
+| `server.py` | 本地网页服务（Flask）+ Canvas 查询缓存 + 访问口令 + 同步接口 |
 | `static/index.html` | 网页界面（原生 JS，无构建步骤） |
 | `run.sh` | 一键启动网页版（自动找 `.venv/Scripts` 或 `.venv/bin`） |
-| `run.ps1` | Windows 上的入口：`-Tests` 跑测试，其余同 `run.sh` |
+| `run.ps1` | Windows 上的入口：`-Tests` 跑测试、`-BindHost`/`-SyncPeer`/`-AccessKey` 对应 `run.sh` 的同名参数 |
 | `requirements.txt` | 运行期依赖，只有 Flask 和 requests |
 | `test/test_query.py` | 查询条件的 39 项用例：① 一句话的解析 19 项 ② 下拉列表的时间选项 20 项 |
-| `test/test_ddl.py` | 取数/去重/翻页的验证（21 项，用模拟数据） |
-| `test/test_store.py` | 交我办导入 + 两种类型的 46 项验证（用模拟数据） |
-| `test/test_server.py` | 网页服务层 122 项：接口形状、按条件取数、时间范围、外部依赖挂了怎么办、演示模式、缓存、浏览器端分发（用假的 Canvas） |
+| `test/test_ddl.py` | 取数/去重/翻页/单门课失败的验证（25 项，用模拟数据） |
+| `test/test_store.py` | 交我办导入 + 两种类型 + 设备号/墓碑/缓存落盘的 68 项验证（用模拟数据） |
+| `test/test_server.py` | 网页服务层 209 项：接口形状（含一段「接口契约」）、按条件取数、时间范围、外部依赖挂了怎么办、演示模式、缓存、访问口令、同步接口、浏览器端分发（用假的 Canvas） |
+| `test/test_sync.py` | 两台机器同步的 61 项：合并的幂等与可交换、三类数据各按各的规则取新、墓碑不复活、时钟差只提示、包里没有凭据 |
 | `test/testdata/sample_calendar_export.json` | 伪造的示例导出文件，用来离线验证导入链路 |
 
 浏览器端的东西都在 `../tools/browser/`，见那里的 README：
@@ -387,8 +418,11 @@ const canAuto = hasGM || hasExt;    // 能自动推 → 挂面板；否则只能
 
 ```
 app/data/calendar.json    最近一次成功导入的交我办快照
-app/data/manual.json      手动录入的条目
+app/data/manual.json      手动录入的条目（删除留墓碑）
+app/data/canvas.json      最近一次成功抓到的 Canvas 待交作业（断网时靠它回答）
 app/data/demo.json        演示模式的开关（演示条目本身不落盘）
+app/data/device.json      这台设备的标识，手动条目的 id 用它打头
+app/data/sync.json        上一次同步的结果（只给人看，不参与合并）
 app/data/inbox/           把导出的 JSON 丢这里，再点「从收件箱导入」
 ```
 
@@ -399,7 +433,7 @@ app/data/inbox/           把导出的 JSON 丢这里，再点「从收件箱导
 ## 怎么验证"做对了"
 
 ```bash
-bash app/run_tests.sh          # 四套测试一起跑，共 228 项
+bash app/run_tests.sh          # 五套测试一起跑，共 402 项
 .\app\run.ps1 -Tests          # Windows 上等价的一条
 ```
 
@@ -506,6 +540,11 @@ bash app/run_tests.sh          # 四套测试一起跑，共 228 项
 | `CANVAS_TOKEN` | 空 | 临时用环境变量给令牌，优先级高于配置文件 |
 | `CANVAS_BASE` | `https://oc.sjtu.edu.cn` | 换个 Canvas 实例 |
 | `NAIWOZHU_DATA_DIR` | `app/data/` | 换本地数据的存放位置 |
+| `NAIWOZHU_CONFIG` | `app/config.local.json` | 换配置文件位置（同一台机器起两个实例时用） |
+| `NAIWOZHU_ACCESS_KEY` | 空 | 访问口令；`--host` 不是回环时必须有，否则拒绝启动 |
+| `NAIWOZHU_HOST` | `127.0.0.1` | 监听地址（`--host` 优先） |
+| `NAIWOZHU_SYNC_PEER` | 空 | 对端地址，如 `http://192.168.1.23:5173` |
+| `NAIWOZHU_SYNC_INTERVAL` | `300` | 自动同步间隔（秒），0 表示只在数据变化时同步 |
 | `NAIWOZHU_CACHE_TTL` | `120` | Canvas 缓存秒数，设 0 等于关掉 |
 | `PORT` | `5173` | 监听端口（`--port` 优先） |
 | `NO_BROWSER` | 空 | 设成任意值就不自动开浏览器 |

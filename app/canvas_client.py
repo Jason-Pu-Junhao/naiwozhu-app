@@ -6,6 +6,11 @@ import re
 import requests
 
 TIMEOUT = 25
+# 连接和读取分开设：连不上要快点认输（树莓派连着没有出口的热点时，SYN 会被直接丢掉，
+# 那种情况下 25 秒的连接超时等于把整个页面卡住）。读则给足时间——翻页时
+# 一次要读几十条作业，慢一点是正常的。
+CONNECT_TIMEOUT = 5
+READ_TIMEOUT = TIMEOUT
 # 每页取大一点，减少翻页次数；Canvas 一般允许到 100
 PER_PAGE = 100
 
@@ -45,7 +50,8 @@ class CanvasClient:
         if not url.startswith("http"):
             url = self.base + url
         try:
-            r = self.s.get(url, params=params, timeout=TIMEOUT)
+            r = self.s.get(url, params=params,
+                           timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
         except requests.RequestException as e:
             # 连不上、超时、代理不可用都走这里。必须包成 CanvasError：
             # 调用方只认这一种异常，漏出去就会变成 500 的 HTML 页。
