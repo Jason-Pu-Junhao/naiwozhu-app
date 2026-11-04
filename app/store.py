@@ -5,6 +5,7 @@
 
     calendar.json   最近一次成功导入的交我办快照
     manual.json     网页/语音自行录入的条目（删除留墓碑，见 delete_manual）
+    hides.json      交我办条目的隐藏记录（只藏不删，见 hide/restore）
     canvas.json     最近一次成功抓到的 Canvas 待交作业（离线时靠它回答）
     demo.json       只存演示模式的开关（演示条目本身每次现生成，见 demo.py）
     device.json     这台设备的标识，手动条目的 id 用它打头，两端同步时靠它区分
@@ -26,7 +27,7 @@ import re
 import secrets
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from model import (CST, KIND_DEADLINE, KIND_SCHEDULE, KINDS, SRC_MANUAL,
                    parse_dt, make_deadline, make_schedule, sort_items,
@@ -49,6 +50,14 @@ def _now_iso():
     return datetime.now(timezone.utc).astimezone(CST).isoformat()
 
 
+class ItemError(ValueError):
+    """改/删条目时给用户看的错误。status 是建议的 HTTP 状态码。"""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
+
+
 def _as_iso(value):
     """接受 datetime 或字符串，统一成 ISO 文本；None 原样返回。"""
     if value is None:
@@ -66,6 +75,7 @@ class Store:
         self.inbox = os.path.join(self.dir, "inbox")
         self.cal_path = os.path.join(self.dir, "calendar.json")
         self.manual_path = os.path.join(self.dir, "manual.json")
+        self.hides_path = os.path.join(self.dir, "hides.json")
         self.canvas_path = os.path.join(self.dir, "canvas.json")
         self.demo_path = os.path.join(self.dir, "demo.json")
         self.device_path = os.path.join(self.dir, "device.json")
@@ -435,6 +445,227 @@ class Store:
                 self._write(self.manual_path, doc)
             return written
 
+    # ------------------------------------------------------------ 改一条手动条目
+    # 这里只认**存储层**字段名。API 那边收的是短名（start/end/due/note），
+    # 由 server.py 的 ITEM_FIELD_MAP 先转一道，别在两层各认一套。
+    MANUAL_PATCH_FIELDS = ("title", "due_at", "start_at", "end_at", "all_day",
+                           "location", "course", "description")
+    PATCH_BY_KIND = {
+        KIND_DEADLINE: ("title", "due_at", "course", "description"),
+        KIND_SCHEDULE: ("title", "start_at", "end_at", "all_day", "location",
+                        "course", "description"),
+    }
+
+    def update_manual(self, item_id, **fields):
+        """改一条手动条目。kind 不可改。
+
+        只在**事实层**上改字段：remaining / start_local 这些派生字段读的时候
+        现算（见 model.DERIVED），这里碰它们反而会把过期的旧值写进盘。
+        """
+        rid = str(item_id)
+        unknown = [k for k in fields if k not in self.MANUAL_PATCH_FIELDS]
+        if unknown:
+            raise ItemError("这些字段改不了：" + "、".join(unknown))
+        if not fields:
+            raise ItemError("没有要改的字段")
+        with _LOCK:
+            doc = self._manual_doc()
+            for it in doc["items"]:
+                if str(it.get("id")) != rid:
+                    continue
+                if it.get("deleted"):
+                    raise ItemError("这条已经删掉了，先恢复再改", 404)
+                kind = it.get("kind")
+                allowed = self.PATCH_BY_KIND.get(kind) or ()
+                bad = [k for k in fields if k not in allowed]
+                if bad:
+                    raise ItemError(f"这条是「{kind}」，改不了：" + "、".join(bad))
+                self._apply_manual_fields(it, fields)
+                it["updated_at"] = _now_iso()
+                it["rev"] = int(it.get("rev") or 1) + 1
+                self._write(self.manual_path, doc)
+                return decorate(strip_derived(it))
+            raise ItemError(f"没有这条手动条目：{rid}", 404)
+
+    @staticmethod
+    def _apply_manual_fields(it, fields):
+        """把一批存储层字段盖到一条事实记录上，顺带校验。"""
+        if "title" in fields:
+            title = str(fields.get("title") or "").strip()
+            if not title:
+                raise ItemError("标题不能为空")
+            it["title"] = title
+        for key in ("course", "location", "description"):
+            if key in fields:
+                val = str(fields.get(key) or "").strip()
+                if len(val) > 200:
+                    raise ItemError("文字太长了（上限 200 字）")
+                it[key] = val
+        if "due_at" in fields:
+            due = parse_dt(fields.get("due_at"))
+            if due is None:
+                raise ItemError("截止时间解析不出来，写成 2026-11-07 14:00 这样", 422)
+            it["due_at"] = due.isoformat()
+        if "all_day" in fields:
+            it["all_day"] = bool(fields.get("all_day"))
+        if "start_at" in fields or "end_at" in fields:
+            start = parse_dt(fields.get("start_at")) if "start_at" in fields \
+                else parse_dt(it.get("start_at"))
+            if "end_at" in fields:
+                end = parse_dt(fields.get("end_at"))      # 传空表示清掉结束时间
+            else:
+                end = parse_dt(it.get("end_at"))
+            if start is None:
+                raise ItemError("日程必须有开始时间", 422)
+            if end is not None and end < start:
+                raise ItemError("结束时间比开始时间早", 422)
+            it["start_at"] = start.isoformat()
+            it["end_at"] = end.isoformat() if end else None
+
+    def restore_manual(self, item_id):
+        """把删掉的手动条目恢复回来。
+
+        恢复**不能**物理删记录：对端还存着那条墓碑，一同步就会把它复活。
+        所以这里写一条 deleted=False、rev 更大的记录，合并时自然赢。
+        """
+        rid = str(item_id)
+        with _LOCK:
+            doc = self._manual_doc()
+            for it in doc["items"]:
+                if str(it.get("id")) != rid:
+                    continue
+                if not it.get("deleted"):
+                    return {"ok": True, "restored": rid, "already": True}
+                it["deleted"] = False
+                it.pop("deleted_at", None)
+                it["updated_at"] = _now_iso()
+                it["rev"] = int(it.get("rev") or 1) + 1
+                self._write(self.manual_path, doc)
+                return {"ok": True, "restored": rid}
+            return {"ok": False, "error": f"没有这条手动条目：{rid}"}
+
+    # ------------------------------------------------------------ 隐藏（交我办条目）
+    def _hides_doc(self):
+        """hides.json：交我办条目「不显示」的记录。
+
+        结构故意和 manual.json 的墓碑一致（deleted / deleted_at / updated_at /
+        rev / device_id），同步合并就能直接复用 rec_key 的全序比较。
+        交我办的原始快照一个字都不改，导入一次也不会把隐藏冲掉。
+        """
+        with _LOCK:
+            doc = self._read(self.hides_path) or {}
+            if not isinstance(doc.get("items"), dict):
+                doc = {"schema": 1, "items": {}}
+            return doc
+
+    def hidden_ids(self):
+        """当前被隐藏的条目 id 集合。读路径每查一次都要，所以只读这一份文件。"""
+        with _LOCK:
+            return {str(k) for k, v in self._hides_doc()["items"].items()
+                    if isinstance(v, dict) and v.get("deleted")}
+
+    def hide_items(self, include_deleted=True):
+        """全部隐藏记录（含「恢复」留下的墓碑），同步用。"""
+        with _LOCK:
+            out = []
+            for rid, rec in self._hides_doc()["items"].items():
+                if not isinstance(rec, dict):
+                    continue
+                if not include_deleted and rec.get("deleted"):
+                    continue
+                out.append({**rec, "id": str(rid)})
+            out.sort(key=lambda r: str(r.get("id")))
+            return out
+
+    def set_hidden(self, item_id):
+        """隐藏一条。幂等：已经藏过就原样返回。"""
+        rid = str(item_id)
+        with _LOCK:
+            doc = self._hides_doc()
+            cur = doc["items"].get(rid)
+            if isinstance(cur, dict) and cur.get("deleted"):
+                return {"ok": True, "hidden": rid, "already": True}
+            now = _now_iso()
+            rec = dict(cur) if isinstance(cur, dict) else {}
+            rec.update({"id": rid, "deleted": True, "deleted_at": now,
+                        "updated_at": now,
+                        "rev": int(rec.get("rev") or 0) + 1,
+                        "device_id": self.device_id()})
+            doc["items"][rid] = rec
+            self._write(self.hides_path, doc)
+            return {"ok": True, "hidden": rid, "rev": rec["rev"]}
+
+    def clear_hidden(self, item_id):
+        """恢复被隐藏的条目。
+
+        和 restore_manual 同理，不能物理删记录：对端还留着那条隐藏记录，
+        一同步就会重新藏上。这里写 deleted=False、rev+1 的记录。
+        """
+        rid = str(item_id)
+        with _LOCK:
+            doc = self._hides_doc()
+            cur = doc["items"].get(rid)
+            if not isinstance(cur, dict) or not cur.get("deleted"):
+                return {"ok": True, "restored": rid, "already": True}
+            cur["deleted"] = False
+            cur.pop("deleted_at", None)
+            cur["updated_at"] = _now_iso()
+            cur["rev"] = int(cur.get("rev") or 0) + 1
+            doc["items"][rid] = cur
+            self._write(self.hides_path, doc)
+            return {"ok": True, "restored": rid}
+
+    def upsert_hides(self, records):
+        """把一批隐藏记录并进 hides.json，逐条按 rec_key 取新的。同步用。"""
+        with _LOCK:
+            doc = self._hides_doc()
+            by_id = {str(k): v for k, v in doc["items"].items()
+                     if isinstance(v, dict)}
+            written = 0
+            for rec in records or []:
+                if not isinstance(rec, dict) or rec.get("id") in (None, ""):
+                    continue
+                rid = str(rec.get("id"))
+                cur = by_id.get(rid)
+                if cur is None or rec_key(rec) > rec_key(cur):
+                    by_id[rid] = strip_derived(rec)
+                    written += 1
+            if written:
+                doc["items"] = dict(sorted(by_id.items()))
+                self._write(self.hides_path, doc)
+            return written
+
+    def prune_hides(self, alive_ids, keep_days=30):
+        """清掉「条目已经不在了」且放够时间的隐藏记录。返回清掉的 id 列表。
+
+        留一段时间是因为对端可能还没同步到这条隐藏记录，清太早会把它复活。
+        """
+        alive = {str(x) for x in (alive_ids or [])}
+        cutoff = datetime.now(timezone.utc) - timedelta(days=keep_days)
+        with _LOCK:
+            doc = self._hides_doc()
+            kept, dropped = {}, []
+            for rid, rec in doc["items"].items():
+                key = str(rid)
+                if key in alive or not isinstance(rec, dict):
+                    kept[key] = rec
+                    continue
+                t = parse_dt(rec.get("deleted_at") or rec.get("updated_at"))
+                if t is not None and t < cutoff:
+                    dropped.append(key)
+                else:
+                    kept[key] = rec
+            if dropped:
+                doc["items"] = kept
+                self._write(self.hides_path, doc)
+            return dropped
+
+    def orphan_hides(self):
+        """快照里已经找不到对应条目的隐藏记录（状态接口用，只报数不清理）。"""
+        alive = {str(i.get("id"))
+                 for i in (self.calendar_snapshot().get("items") or [])}
+        return sorted(rid for rid in self.hidden_ids() if rid not in alive)
+
     # ------------------------------------------------------------ 同步状态
     def sync_state(self):
         return self._read(self.sync_path) or {}
@@ -452,6 +683,43 @@ class Store:
         items = list(self.calendar_items()) + list(self.manual_items())
         if kind:
             items = [i for i in items if i.get("kind") == kind]
+        return sort_items(items)
+
+    def effective_items(self, kind=None):
+        """查询结果用的条目：把被隐藏的交我办条目剔掉。
+
+        **必须**在 in_window() 过滤之前调用（server.py 里就是这么用的）：
+        顺序反了，隐藏的条目会在按时间窗筛完之后再被剔掉，
+        数出来的数量、以及"这一窗里有没有内容"的判断都会错。
+        """
+        items = self.all_items(kind=kind)
+        hidden = self.hidden_ids()
+        if not hidden:
+            return items
+        return [i for i in items if str(i.get("id")) not in hidden]
+
+    def get_item(self, item_id):
+        """按 id 找一条，交我办快照与手动条目里都找。找不到返回 None。
+
+        删除/隐藏过的也找得到——恢复、幂等判断都要靠它。
+        """
+        rid = str(item_id)
+        with _LOCK:
+            for it in self.calendar_snapshot().get("items") or []:
+                if str(it.get("id")) == rid:
+                    return decorate(it)
+            for it in self._manual_doc()["items"]:
+                if str(it.get("id")) == rid:
+                    return decorate(it)
+        return None
+
+    def hidden_calendar_items(self):
+        """被隐藏的交我办条目（网页上的「已隐藏」列表与恢复用）。"""
+        hidden = self.hidden_ids()
+        if not hidden:
+            return []
+        items = [decorate(i) for i in (self.calendar_snapshot().get("items") or [])
+                 if str(i.get("id")) in hidden]
         return sort_items(items)
 
     def pending_manual_deadlines(self):

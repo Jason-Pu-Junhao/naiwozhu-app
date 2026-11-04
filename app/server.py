@@ -15,7 +15,7 @@
     交我办日历               → 日程，走浏览器导出脚本 + 本机导入
     网页 / 语音自行录入      → 两种都行，录入时自己说明是哪一种
 
-两台机器之间还有一路同步（见 sync.py 与仓库根目录的 SYNC.md）。
+两台机器之间还有一路同步，规则都在 sync.py 里。
 """
 import hmac
 import io
@@ -36,7 +36,7 @@ import demo
 import model
 from canvas_client import CanvasClient, CanvasError
 from ddl_service import DDLService
-from store import Store
+from store import ItemError, Store
 import query as q
 import sync as sync_mod
 
@@ -387,6 +387,8 @@ def api_status():
         "calendar": store.calendar_meta(),
         "inbox": store.inbox,
         "manual_count": len(store.manual_items()),
+        "hidden_count": len(store.hidden_ids()),
+        "orphan_hides": store.orphan_hides(),
         "has_export_script": os.path.exists(EXPORT_SCRIPT),
         # 自查扩展：目录路径直接给网页，「加载已解压的扩展程序」时选它
         "extension_dir": BROWSER_DIR,
@@ -480,6 +482,9 @@ def api_import():
                                force=bool(body.get("force")))
     if res.get("ok") and not res.get("stale"):
         _wake.set()             # 有新数据，同步线程不用等满一个间隔
+        pruned = _prune_hides()  # 快照整份换了，被删掉的课留下的隐藏记录可以清
+        if pruned:
+            res["pruned_hides"] = pruned
     return jsonify(res), (200 if res.get("ok") else 400)
 
 
@@ -567,6 +572,161 @@ def api_manual_delete(item_id):
     return jsonify(res), (200 if res.get("ok") else 404)
 
 
+# ---------------------------------------------------------------- 条目 改 / 删 / 隐藏
+# API 收短名（和 POST /api/manual 的既有习惯一致），进存储层之前换成存储字段名。
+# 两层各认一套名字是最容易出错的地方：in_window() 读的是 start_at/end_at，
+# 写进一个叫 start 的字段等于没改。
+ITEM_FIELD_MAP = {
+    "title": "title",
+    "start": "start_at",
+    "end": "end_at",
+    "due": "due_at",
+    "location": "location",
+    "course": "course",
+    "note": "description",
+    "all_day": "all_day",
+}
+
+# 写接口统一带这一句给终端拿去播报，别把「只在本机生效」硬编码在话术里。
+LOCAL_ONLY = {"local_only": True,
+              "tip": "只在本机生效；交我办里的课表还是原样"}
+
+
+def _item_source(item_id):
+    """按 id 前缀判断来源。交我办是 cal-*，手动录入是 manual-*。"""
+    if item_id.startswith("manual-"):
+        return "manual"
+    if item_id.startswith("cal-"):
+        return "calendar"
+    return "other"
+
+
+def _item_flags(item, source=None):
+    """给条目补两个前端要用的布尔值，省得前端去猜 id 前缀。"""
+    src = source or _item_source(str(item.get("id") or ""))
+    item["editable"] = src == "manual"
+    item["hideable"] = src == "calendar"
+    return item
+
+
+def _item_error(msg, status=400):
+    return jsonify({"ok": False, "error": msg}), status
+
+
+def _prune_hides():
+    """快照被整份替换之后清一次孤儿隐藏记录。失败不影响主流程。"""
+    try:
+        alive = [i.get("id") for i in (store.calendar_snapshot().get("items") or [])]
+        return store.prune_hides(alive)
+    except Exception:            # noqa: BLE001
+        return []
+
+
+@app.get("/api/items")
+def api_items():
+    """条目列表（已合并隐藏）。
+
+    hidden=1 时反过来只给「被隐藏的那几条」，网页拿它做恢复。
+    """
+    if str(request.args.get("hidden") or "").lower() in ("1", "true", "yes"):
+        items = store.hidden_calendar_items()
+        for it in items:
+            it["hidden"] = True
+            it["editable"] = False
+            it["hideable"] = True
+        return jsonify({"ok": True, "items": items, "count": len(items),
+                        "hidden_count": len(items)})
+
+    kind = (request.args.get("kind") or "").strip() or None
+    if kind and kind not in model.KINDS:
+        return _item_error(f"不认识的问题类型：{kind}")
+    items = [_item_flags(it) for it in store.effective_items(kind=kind)]
+    return jsonify({"ok": True, "items": items, "count": len(items),
+                    "hidden_count": len(store.hidden_ids())})
+
+
+@app.patch("/api/item/<item_id>")
+def api_item_patch(item_id):
+    """改一条。只放行手动录入的条目。"""
+    item_id = str(item_id)
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return _item_error("请求体要是一个 JSON 对象")
+    if "kind" in body:
+        return _item_error("条目的类型不能改；要换类型就删掉重新录一条")
+    if not body:
+        return _item_error("没有要改的字段")
+    fields = {}
+    for key, val in body.items():
+        name = ITEM_FIELD_MAP.get(key)
+        if name is None:
+            return _item_error(f"这个字段改不了：{key}")
+        fields[name] = val
+
+    src = _item_source(item_id)
+    if src == "calendar":
+        if store.get_item(item_id) is None:
+            return _item_error(f"没有这条：{item_id}", 404)
+        return jsonify({
+            "ok": False,
+            "code": "readonly_source",
+            "error": "交我办里的课表不能在本机改时间。要改期，"
+                     "把原来那条隐藏，再手动加一条新的。",
+            "hint": "DELETE /api/item/<id> 隐藏原条目，"
+                    "POST /api/manual 新增一条",
+        }), 409
+    if src != "manual":
+        return _item_error("截止时间以 Canvas 为准，这里不能改", 409)
+
+    try:
+        item = store.update_manual(item_id, **fields)
+    except ItemError as e:
+        return _item_error(str(e), e.status)
+    _wake.set()
+    return jsonify({"ok": True, "item": _item_flags(item, "manual"),
+                    "effective": LOCAL_ONLY})
+
+
+@app.delete("/api/item/<item_id>")
+def api_item_delete(item_id):
+    """删一条：手动条目留墓碑，交我办条目写隐藏记录。"""
+    item_id = str(item_id)
+    src = _item_source(item_id)
+    if src == "manual":
+        res = store.delete_manual(item_id)
+        if not res.get("ok"):
+            return jsonify(res), 404
+        _wake.set()
+        return jsonify({**res, "effective": LOCAL_ONLY})
+    if src == "calendar":
+        if store.get_item(item_id) is None:
+            return _item_error(f"没有这条：{item_id}", 404)
+        res = store.set_hidden(item_id)
+        _wake.set()
+        return jsonify({**res, "effective": LOCAL_ONLY})
+    return _item_error("截止时间以 Canvas 为准，这里不能删；"
+                       "要它别出现就用网页上的时间筛选", 409)
+
+
+@app.post("/api/item/<item_id>/restore")
+def api_item_restore(item_id):
+    """撤销删除 / 撤销隐藏。"""
+    item_id = str(item_id)
+    src = _item_source(item_id)
+    if src == "manual":
+        res = store.restore_manual(item_id)
+    elif src == "calendar":
+        if store.get_item(item_id) is None:
+            return _item_error(f"没有这条：{item_id}", 404)
+        res = store.clear_hidden(item_id)
+    else:
+        return _item_error("截止时间以 Canvas 为准，这里不用恢复", 409)
+    if not res.get("ok"):
+        return jsonify(res), 404
+    _wake.set()
+    return jsonify({**res, "effective": LOCAL_ONLY})
+
+
 # ---------------------------------------------------------------- 两台机器同步
 def _sync_pull(peer=None, key=None):
     """向对端同步一次，并把结果记进 sync.json。失败抛 SyncError。"""
@@ -603,6 +763,7 @@ def api_sync_recv():
         merged, changes = sync_mod.handle_incoming(store, body)
     except sync_mod.SyncError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
+    _prune_hides()
     skew = sync_mod.clock_skew_seconds(body)
     store.set_sync_state(last_attempt=_now_iso(), last_ok=True, last_error="",
                          last_received=changes, peer_device=body.get("device_id"),
@@ -716,8 +877,11 @@ def api_query():
     demo_on = store.demo_on()
     warning = None
 
-    # 1) 本机存的：交我办日程 + 手动录入；演示模式下再叠上演示数据
-    pool = list(store.all_items())
+    # 1) 本机存的：交我办日程 + 手动录入，**已剔掉被隐藏的**；
+    #    演示模式下再叠上演示数据。
+    #    合并必须在 in_window() 之前：隐藏要在筛选前生效，
+    #    否则数出来的条数与「这一窗里还有没有内容」都会错。
+    pool = list(store.effective_items())
     if demo_on:
         pool += demo.items()
     cands = [it for it in pool if not kind or it.get("kind") == kind]
@@ -732,12 +896,15 @@ def api_query():
         cands += got
 
     items = model.sort_items([it for it in cands if in_window(it, span, course)])
+    for it in items:
+        _item_flags(it)
 
     # cache_age 的含义是"这次回答用到的 Canvas 数据有多旧"，
     # 这次没碰 Canvas（演示模式、或者只问日程）时就该是空。
     age = cache_age() if used_canvas else None
     out = {"ok": True, "items": items, "parsed": parsed,
            "count": len(items), "kind": kind,
+           "hidden_count": len(store.hidden_ids()),
            "range": range_id, "range_label": label,
            "window": q.span_label(span),
            "demo": demo_on,

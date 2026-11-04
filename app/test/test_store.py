@@ -17,6 +17,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import model
+import store as store_mod
 from store import Store
 import calendar_import
 
@@ -301,6 +302,87 @@ def main():
               st.import_payload({"hello": "world"})["ok"] is False)
         check("events 不是列表会被拒",
               st.import_payload({"events": "oops"})["ok"] is False)
+
+        # ---------------------------------------------------------- 隐藏交我办条目
+        print("\n隐藏交我办条目（hides.json）")
+        hs = Store(data_dir=os.path.join(tmp, "hides"))
+        hs.import_payload(PAYLOAD, filename="hide.json", force=True)
+        ids = [i["id"] for i in hs.calendar_items()]
+        target = ids[0]
+        check("先有 3 条", len(ids) == 3, ids)
+        check("隐藏成功", hs.set_hidden(target)["ok"] is True)
+        check("★隐藏是幂等的", hs.set_hidden(target).get("already") is True)
+        check("hidden_ids 里只有它", hs.hidden_ids() == {target}, hs.hidden_ids())
+        check("★查询用的条目里没有它",
+              target not in [i["id"] for i in hs.effective_items()],
+              [i["id"] for i in hs.effective_items()])
+        check("★原始快照一个字没动（all_items 还看得到）",
+              target in [i["id"] for i in hs.all_items()])
+        check("已隐藏列表能拿到",
+              [i["id"] for i in hs.hidden_calendar_items()] == [target])
+        check("恢复后重新出现", hs.clear_hidden(target)["ok"] is True
+              and target in [i["id"] for i in hs.effective_items()])
+        check("重复恢复也幂等", hs.clear_hidden(target).get("already") is True)
+        live = [r for r in hs.hide_items() if r["id"] == target][0]
+        check("★恢复留的是 deleted=False 的记录（否则同步会复活）",
+              live.get("deleted") is False, live)
+
+        print("\n孤儿隐藏记录会被清掉")
+        hs.set_hidden("cal-ghost")
+        check("孤儿会计数", hs.orphan_hides() == ["cal-ghost"], hs.orphan_hides())
+        doc = hs._hides_doc()
+        doc["items"]["cal-ghost"]["deleted_at"] = "2020-01-01T00:00:00+08:00"
+        doc["items"]["cal-ghost"]["updated_at"] = "2020-01-01T00:00:00+08:00"
+        hs._write(hs.hides_path, doc)
+        hs.set_hidden(target)          # 这条还活着，不该被清
+        dropped = hs.prune_hides([i["id"] for i in hs.calendar_items()], keep_days=30)
+        check("★放够时间的孤儿被清掉", dropped == ["cal-ghost"], dropped)
+        check("★还活着的隐藏记录没被清", target in hs.hidden_ids(), hs.hidden_ids())
+        check("孤儿清完就不再计数", hs.orphan_hides() == [], hs.orphan_hides())
+
+        # ---------------------------------------------------------- 改手动条目
+        print("\n改手动条目（update_manual / restore_manual）")
+        m = hs.add_manual(model.KIND_SCHEDULE, "补课",
+                          start="2026-11-11T14:00", end="2026-11-11T15:40",
+                          location="东中院", note="改期自 cal-1")
+        check("先建一条", m["rev"] == 1)
+        up = hs.update_manual(m["id"], title="补课（改）",
+                              start_at="2026-11-11T16:00",
+                              end_at="2026-11-11T17:00")
+        check("标题改了", up["title"] == "补课（改）", up["title"])
+        check("开始时间改了", up["start_at"].startswith("2026-11-11T16:00"), up["start_at"])
+        check("★rev 加了 1", up["rev"] == 2, up["rev"])
+        check("★派生字段按新时间重算", up["start_local"] == "11-11 16:00", up["start_local"])
+        check("备注没被顺手抹掉", up.get("description") == "改期自 cal-1", up.get("description"))
+
+        def expect_error(name, want, **fields):
+            try:
+                hs.update_manual(m["id"], **fields)
+                check(name, False, "没有报错")
+            except store_mod.ItemError as e:
+                check(name, getattr(e, "status", None) == want, f"{e.status} {e}")
+
+        expect_error("★日程不给改截止时间", 400, due_at="2026-11-11T10:00")
+        expect_error("★结束早于开始会被拒（422）", 422, start_at="2026-11-11T18:00")
+        expect_error("空标题会被拒", 400, title="   ")
+        expect_error("不认识的字段会被拒", 400, nope="x")
+        try:
+            hs.update_manual("manual-999", title="x")
+            check("改不存在的报 404", False)
+        except store_mod.ItemError as e:
+            check("改不存在的报 404", getattr(e, "status", None) == 404, str(e))
+        check("能改 all_day", hs.update_manual(m["id"], all_day=True)["all_day"] is True)
+        check("能把结束时间清掉", hs.update_manual(m["id"], end_at=None)["end_at"] is None)
+
+        hs.delete_manual(m["id"])
+        expect_error("★删掉之后不能再改（404）", 404, title="x")
+        rev_before = hs.get_item(m["id"])["rev"]
+        check("恢复成功", hs.restore_manual(m["id"])["ok"] is True)
+        check("★恢复也靠 rev+1 传播", hs.get_item(m["id"])["rev"] == rev_before + 1,
+              (rev_before, hs.get_item(m["id"])["rev"]))
+        check("恢复后回到条目列表",
+              m["id"] in [i["id"] for i in hs.effective_items("日程")])
+        check("手动条目不算隐藏", m["id"] not in hs.hidden_ids())
 
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

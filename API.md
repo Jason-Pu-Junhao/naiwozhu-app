@@ -84,6 +84,45 @@
 
 ---
 
+### 1.7 `PATCH /api/item/<id>` —— 改一条（只有手动条目能改）
+
+```json
+{"title": "高数第三章作业（改）",
+ "start": "2026-11-07T14:00", "end": "2026-11-07T15:40"}
+```
+
+| 来源 | 能不能改 | 不能改时给什么 |
+|---|---|---|
+| `manual-*` | ✅ | — |
+| `cal-*`（交我办） | ❌ 409 `readonly_source` | 提示「先隐藏原条目，再手动加一条」 |
+| Canvas 截止 | ❌ 409 | 截止时间以 Canvas 为准 |
+
+- 入参用**短名**：`title` / `start` / `end` / `due` / `location` / `course` / `note` / `all_day`；
+  落库对应 `title` / `start_at` / `end_at` / `due_at` / `location` / `course` / `description` / `all_day`。
+- `kind` 不能改（400）；日程不能传 `due`，截止不能传 `start`/`end`（400）。
+- `end` 早于 `start` → 422；时间解析不出来 → 422；标题为空 → 400。
+- 成功：`{"ok": true, "item": {...}, "effective": {"local_only": true, "tip": "..."}}`。
+  `local_only` 恒为 true——改动只在本机生效，交我办与 Canvas 都不会变。
+- 404：条目不存在，或已经被删掉（先用 restore 恢复）。
+
+### 1.8 `DELETE /api/item/<id>` —— 删一条
+
+| 来源 | 实际做了什么 |
+|---|---|
+| `manual-*` | 留墓碑（`deleted: true`、`rev+1`），同步时靠它把对端那份也删掉 |
+| `cal-*` | 在 `app/data/hides.json` 里写一条隐藏记录；**交我办快照一个字不动** |
+| Canvas 截止 | 409，不让删 |
+
+- 幂等：重复删同一条返回 `already: true`。
+- 返回 `{"ok": true, "removed"/"hidden": "<id>", "effective": {"local_only": true}}`。
+- 隐藏不会影响导入：重新导入一份交我办快照，隐藏仍然生效。
+
+### 1.9 `POST /api/item/<id>/restore` —— 撤销删除 / 撤销隐藏
+
+- 手动条目：`deleted` 改回 `false`、`rev+1`（**不物理删记录**，否则同步会把删除复活）。
+- 交我办条目：把 `hides.json` 里那条记录改成 `deleted: false`、`rev+1`。
+- 幂等：本来就没删/没隐藏 → `already: true`。
+
 ## 2. 查询
 
 ### 2.1 `POST /api/query` —— 主查询
@@ -161,6 +200,8 @@
 | `calendar.count` / `exported_at` / `imported_at` | 交我办快照的情况 |
 | `configured` | 首次配置是否完成（有快照，或有令牌且填了对端） |
 | `manual_count` | 手动条目条数 |
+| `hidden_count` | 被隐藏的交我办条目条数 |
+| `orphan_hides` | 快照里已经找不到对应条目的隐藏记录（排查用） |
 | `demo` / `demo_banner` | 演示模式 |
 | `cache_age` / `cache_ttl` | Canvas 内存缓存 |
 | `canvas.meta` / `canvas.stale_seconds` | Canvas 磁盘缓存 |
@@ -191,6 +232,24 @@ query.parse("高数有什么作业")
 - `days`：`1`=今天、`2`=明天、`3`=后天、`7`=这周、`14`=下周、`31`=本月；
   交给 `query.span_from_days(days)` 折成区间。
 - `HELP_TEXT` 是给用户看的说明，可以直接念出来。
+
+### 2.5 `GET /api/items` —— 条目列表（合并隐藏之后，网页编辑用）
+
+```
+GET /api/items             → 全部（已剔掉被隐藏的）
+GET /api/items?kind=日程    → 只要某一种
+GET /api/items?hidden=1    → 反过来：只给被隐藏的那几条（恢复用）
+```
+
+每条在条目字段之外多两个布尔值：
+
+| 字段 | 含义 |
+|---|---|
+| `editable` | `manual-*` 为 true，可以 PATCH / DELETE |
+| `hideable` | `cal-*` 为 true，可以隐藏 |
+| `hidden` | 只在 `?hidden=1` 时出现，恒为 true |
+
+顶层还有 `count` 与 `hidden_count`。`/api/query` 返回的条目也带 `editable` / `hideable`。
 
 ---
 
@@ -236,6 +295,11 @@ query.parse("高数有什么作业")
 
 `remaining` / `overdue` / `*_local` 都是**每次读取时按当前时间现算**的，
 落盘和同步包里没有它们——所以拿到手就是新的，不用自己再算。
+
+交我办条目的隐藏记录存在 `app/data/hides.json`（不进 Git），
+结构就是一条墓碑（`id` / `deleted` / `deleted_at` / `updated_at` / `rev` / `device_id`），
+所以两台机器之间能像手动条目一样按 `rev` 合并。
+接口返回里的 `editable` / `hideable` / `hidden` 不落盘，只在返回时按 id 前缀算出来。
 
 ---
 
@@ -310,7 +374,9 @@ server.in_window(item, span, course_kw)   # 和服务端完全一样的筛选规
 | `400` | 请求本身有问题，`error` 里有原因 |
 | `401` | 口令不对；`need_key: true` |
 | `403` | 那台机器还没设口令，所以它不对外提供数据 |
-| `404` | 条目不存在（删除时） |
+| `404` | 条目不存在（改、删、恢复时） |
+| `409` | 来源只读：Canvas 截止不能改删；`cal-*` 不能改时间（只能隐藏） |
+| `422` | 参数值不合理，比如日程的结束时间早于开始时间 |
 | `413` | 请求体超过 8 MB（同步包才会这么大） |
 | `500` | 没预料到的错。**也是 JSON**，带一句人话，不会回 HTML |
 
@@ -320,8 +386,11 @@ server.in_window(item, span, course_kw)   # 和服务端完全一样的筛选规
 
 - **`GET /api/voice?q=…`**：给硬件准备的紧凑接口，还没做（① 第 1–4 周的任务，
   在那之前用 `/api/query` 的 `text`。
-- **改一条**：没有 `PUT/PATCH`。要改就删掉重加。
 - **批量删除 / 批量新增**：一次一条。
+- **写回交我办 / Canvas**：没有任何写接口。交我办的数据是浏览器导出来的一份快照，
+  改不了源头；截止时间以 Canvas 为准。
+- **直接改交我办条目的时间**：只能隐藏原条目再手动加一条，不能就地改
+  （本地改课表会造出一份假课表，见 `docs/DESIGN_日程修改删除.md`）。
 - **分页**：`/api/query` 一次给全量，网页自己截前 10 条。条目多的时候（几十条）没问题。
 - **CORS**：故意没有（见项目里的 D04 决策：加了就等于让浏览器里任何一个网页都能往本机写数据）。
   浏览器里跨源调用会被拦，

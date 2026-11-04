@@ -70,6 +70,7 @@ NAIWOZHU_ACCESS_KEY='刚才那串口令' \
 | 交我办快照 | 整份 | `exported_at` 更新的那份 |
 | Canvas 缓存 | 整份 | 先看这次抓到没有，再比抓取时间 |
 | 手动条目 | 逐条 | `updated_at` → `rev` → 设备号 |
+| 交我办的隐藏记录 | 逐条 | 同上（`app/data/hides.json`） |
 
 三条都是"在某个顺序上取最大的那个"，所以：
 
@@ -79,6 +80,10 @@ NAIWOZHU_ACCESS_KEY='刚才那串口令' \
 
 **删除留墓碑**：删掉一条时，文件里那条记录被标成已删除，不会被抹掉。
 否则另一台机器上那份会在下次同步时把它"送回来"。
+
+**隐藏也是墓碑**：交我办的条目只能隐藏（`hides.json` 里记一条 `deleted: true`）。
+恢复时写一条 `deleted: false`、`rev` 更大的记录，不物理删——
+物理删的话对端还留着那条隐藏记录，一同步就又藏上了。
 
 **两台各自抓 Canvas** 不会打架：抓的是同一份权威数据，比时间就是比谁抓得晚。
 一台抓失败时，它那份不会覆盖另一台抓成功的。
@@ -237,6 +242,8 @@ curl -m 3 http://<树莓派的 IP>:5173/api/status
 | `server.canvas_deadlines()` | 仍然返回 `(items, warning)`；要"是不是缓存"用新的 `canvas_deadlines_detail()` |
 | `model.make_deadline/make_schedule` | 没变 |
 | `POST /api/sync`、`/api/sync/now`、`/api/sync/settings` | 新增 |
+| `PATCH`/`DELETE /api/item/<id>`、`POST /api/item/<id>/restore`、`GET /api/items` | 新增；原有接口一个没动 |
+| 同步包 | 多一个**可选**段 `hides`；`schema` 仍是 1，老版本收到会忽略它 |
 
 两处**语义**上确实变了，用的时候要留意：
 

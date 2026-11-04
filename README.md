@@ -7,7 +7,7 @@
 
 | 目录 | 是什么 |
 |---|---|
-| `app/` | 本地网页版：Canvas 取数、交我办日历导入、查询、手动录入、演示模式 |
+| `app/` | 本地网页版：Canvas 取数、交我办日历导入、查询、手动录入、条目改删隐藏、演示模式 |
 | `tools/browser/` | 交我办同步脚本（一份代码，三种装法）+ 自带的 Chrome 扩展 |
 | `tools/verify_windows.py` `.ps1` | Windows 兼容性体检 |
 | `tools/canvas_check.py` | Canvas 令牌自检 |

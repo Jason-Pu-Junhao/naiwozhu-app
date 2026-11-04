@@ -727,6 +727,103 @@ def main():
             server.DDLService = real_ddl
             server.reset_cache()
 
+        # ---------------------------------------------------------- 条目 改/删/隐藏
+        print("\n条目改 / 删 / 隐藏（/api/items、/api/item）")
+        hide_payload = {
+            "tool": "奶我助 · 交我办日历导出", "version": 1,
+            "exported_at": "2030-01-01T00:00:00+08:00",
+            "calendars": {"my": [{"id": 11, "name": "我的日程"}]},
+            "events": [
+                {"eventId": 7001, "calendarId": 11, "title": "隐藏我",
+                 "startTime": "2030-01-05 08:00", "endTime": "2030-01-05 09:40"},
+                {"eventId": 7002, "calendarId": 11, "title": "留着我",
+                 "startTime": "2030-01-06 08:00", "endTime": "2030-01-06 09:40"},
+            ],
+        }
+        r = c.post("/api/import", json={"payload": hide_payload})
+        check("导入成功", r.status_code == 200 and r.get_json().get("ok") is True,
+              r.get_json())
+
+        d = c.get("/api/items").get_json()
+        ids = [i["id"] for i in d["items"]]
+        check("两条交我办条目都在", "cal-7001" in ids and "cal-7002" in ids, ids)
+        rows = {i["id"]: i for i in d["items"]}
+        check("★交我办条目：不可改、可隐藏",
+              rows["cal-7001"]["editable"] is False
+              and rows["cal-7001"]["hideable"] is True, rows["cal-7001"])
+
+        r = c.patch("/api/item/cal-7001", json={"start": "2030-01-05T14:00"})
+        check("★改交我办条目被拒（409）", r.status_code == 409, r.get_json())
+        check("★并给出替代做法",
+              (r.get_json() or {}).get("code") == "readonly_source", r.get_json())
+        r = c.patch("/api/item/cal-7001", json={"start": "2030-01-05T14:00"})
+        r = c.patch("/api/item/cal-nope", json={"start": "2030-01-05T14:00"})
+        check("★改不存在的条目是 404", r.status_code == 404, r.get_json())
+
+        r = c.delete("/api/item/cal-7001")
+        check("隐藏成功", r.status_code == 200 and r.get_json().get("ok") is True,
+              r.get_json())
+        check("★隐藏返回里说明只在本机生效",
+              (r.get_json() or {}).get("effective", {}).get("local_only") is True)
+        d = c.get("/api/items").get_json()
+        check("★隐藏后列表里没了", "cal-7001" not in [i["id"] for i in d["items"]], d)
+        check("hidden_count 正确", d["hidden_count"] == 1, d["hidden_count"])
+        hid = c.get("/api/items?hidden=1").get_json()
+        check("能列出已隐藏的", [i["title"] for i in hid["items"]] == ["隐藏我"], hid)
+        q = c.post("/api/query", json={"range": "all", "kind": model.KIND_SCHEDULE}).get_json()
+        check("★查询结果里也没有被隐藏的",
+              "隐藏我" not in [i["title"] for i in q.get("items") or []], q.get("items"))
+        check("查询顺带给出 hidden_count", q.get("hidden_count") == 1, q.get("hidden_count"))
+        r = c.post("/api/item/cal-7001/restore")
+        check("恢复成功", r.status_code == 200, r.get_json())
+        d = c.get("/api/items").get_json()
+        check("恢复后回到列表", "cal-7001" in [i["id"] for i in d["items"]], d["count"])
+
+        print("\n手动条目：能改、能删、能恢复")
+        r = c.post("/api/manual", json={"kind": model.KIND_SCHEDULE, "title": "补课",
+                                        "start": "2030-01-07T14:00",
+                                        "end": "2030-01-07T15:40",
+                                        "note": "改期自 cal-7001"})
+        mid = r.get_json()["item"]["id"]
+        d = c.get("/api/items").get_json()
+        me = [i for i in d["items"] if i["id"] == mid][0]
+        check("★手动条目：可改可删、不可隐藏",
+              me["editable"] is True and me["hideable"] is False, me)
+
+        r = c.patch("/api/item/" + mid, json={"start": "2030-01-07T16:00",
+                                              "end": "2030-01-07T17:00",
+                                              "title": "补课（改）"})
+        got = r.get_json()
+        check("改成功", r.status_code == 200 and got["item"]["title"] == "补课（改）", got)
+        check("★时间写进了 start_at（不是 start）",
+              got["item"]["start_at"].startswith("2030-01-07T16:00"), got["item"])
+        check("没动的字段还在", got["item"].get("description") == "改期自 cal-7001",
+              got["item"].get("description"))
+        r = c.patch("/api/item/" + mid, json={"kind": "deadline"})
+        check("不许改类型", r.status_code == 400, r.get_json())
+        r = c.patch("/api/item/" + mid, json={"due": "2030-01-07T10:00"})
+        check("★日程不给改 due", r.status_code == 400, r.get_json())
+        r = c.patch("/api/item/" + mid, json={"start": "2030-01-07T18:00"})
+        check("★结束早于开始 → 422", r.status_code == 422, r.get_json())
+        r = c.patch("/api/item/" + mid, json={"title": "x", "weird": 1})
+        check("不认识的字段 → 400", r.status_code == 400, r.get_json())
+
+        r = c.delete("/api/item/" + mid)
+        check("删手动条目", r.status_code == 200, r.get_json())
+        r = c.patch("/api/item/" + mid, json={"title": "x"})
+        check("★删掉之后不能再改（404）", r.status_code == 404, r.get_json())
+        r = c.post("/api/item/" + mid + "/restore")
+        check("恢复手动条目", r.status_code == 200, r.get_json())
+
+        r = c.delete("/api/item/canvas-1")
+        check("★Canvas 截止不能删（409）", r.status_code == 409, r.get_json())
+        r = c.patch("/api/item/canvas-1", json={"title": "x"})
+        check("Canvas 截止不能改（409）", r.status_code == 409, r.get_json())
+
+        st = c.get("/api/status").get_json()
+        check("状态里有 hidden_count", "hidden_count" in st, sorted(st)[:8])
+        check("状态里有 orphan_hides", st.get("orphan_hides") == [], st.get("orphan_hides"))
+
     finally:
         shutil.rmtree(_TMP, ignore_errors=True)
 

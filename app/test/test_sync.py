@@ -339,6 +339,48 @@ def main():
     except sync.SyncError:
         check("handle_incoming 拒绝不认识的版本", True)
 
+    print("\n隐藏记录跟着同步走（可选段，版本号不动）")
+    C, D = new_store("nwz-sync-c-"), new_store("nwz-sync-d-")
+    C.replace_calendar("2026-10-01T10:00:00+08:00", [
+        model.make_schedule("cal-1", "高等数学",
+                            datetime(2026, 11, 10, 8, 0, tzinfo=model.CST),
+                            datetime(2026, 11, 10, 9, 40, tzinfo=model.CST),
+                            model.SRC_CALENDAR),
+    ], source_device="aa")
+    C.set_hidden("cal-1")
+    bundle = sync.build_bundle(C)
+    check("包里带 hides 段", len(bundle.get("hides") or []) == 1, bundle.get("hides"))
+    check("★版本号没升（升了老对端会拒收）", bundle.get("schema") == 1, bundle.get("schema"))
+    check("summary 里有 hides 计数", sync.bundle_summary(bundle)["hides"] == 1)
+
+    wrote = sync.apply_bundle(D, bundle)
+    check("对端收下隐藏记录", wrote["hides"] == 1, wrote)
+    check("★对端也看不到这条", [i["id"] for i in D.effective_items()] == [],
+          [i["id"] for i in D.effective_items()])
+    check("★重复合并不再写（幂等）",
+          D.upsert_hides(bundle["hides"]) == 0)
+    check("★老包没有 hides 段也照样收",
+          sync.validate({k: v for k, v in bundle.items() if k != "hides"}) is not None)
+    try:
+        sync.validate(dict(bundle, hides={"oops": 1}))
+        check("hides 不是列表会被拒", False)
+    except sync.SyncError:
+        check("hides 不是列表会被拒", True)
+
+    C.clear_hidden("cal-1")
+    sync.apply_bundle(D, sync.build_bundle(C))
+    check("★恢复也同步到对端", D.hidden_ids() == set(), D.hidden_ids())
+    check("恢复后对端重新看得到这条",
+          [i["id"] for i in D.effective_items()] == ["cal-1"])
+
+    # 两端同时藏同一条：合并后不会打架，重发也不变
+    C.set_hidden("cal-1")
+    D.set_hidden("cal-1")
+    merged, _ = sync.handle_incoming(D, sync.build_bundle(C))
+    check("两端都藏了同一条时结果还是藏", [r["id"] for r in merged["hides"]] == ["cal-1"])
+    check("★合并后再来一轮，记录数不变",
+          len(sync.handle_incoming(D, sync.build_bundle(C))[0]["hides"]) == 1)
+
     print("\n收尾")
     for d in DIRS:
         shutil.rmtree(d, ignore_errors=True)

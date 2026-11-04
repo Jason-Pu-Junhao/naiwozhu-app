@@ -85,6 +85,10 @@
   .meta a:hover{text-decoration:underline}
   .meta .del{color:var(--faint);cursor:pointer}
   .meta .del:hover{color:var(--red)}
+  .meta .act{color:var(--faint);cursor:pointer}
+  .meta .act:hover{color:var(--navy)}
+  .note a{color:var(--navy);text-decoration:none;cursor:pointer}
+  .note a:hover{text-decoration:underline}
   .more{width:100%;text-align:center;padding:16px 0;font-size:13.5px;
         color:var(--navy);font-weight:600}
   .more:hover{background:var(--soft)}
@@ -456,6 +460,7 @@
       <input id="mEnd" type="datetime-local" hidden>
       <input id="mExtra" placeholder="课程名（可选）" autocomplete="off">
       <button class="primary" id="mAdd">添加</button>
+      <button class="ghost" id="mCancel" hidden>取消</button>
     </div>
     <div class="tip" id="mHint"></div>
   </div>
@@ -491,8 +496,11 @@ const state = {
   hasData: false,    // 首次配置是否已完成
   calCount: 0,       // 交我办快照里有多少条（同步过来的也算）
   noKey: false,      // 是不是因为没带访问口令而被挡在外面
+  hiddenView: false, // 列表区现在显示的是不是「已隐藏」那几条
+  hiddenItems: [],
 };
 let manualKind = 'deadline';
+let editingId = null;   // 非空表示添加表单正在改一条已有条目
 
 // 允许用 ?tab=日程 直接停在一格，方便存书签（老地址里叫 tab，照旧认）
 {
@@ -832,8 +840,17 @@ function row(it){
     if (it.calendar) bits.push(esc(it.calendar));
   }
   if (it.html_url) bits.push(`<a href="${esc(it.html_url)}" target="_blank" rel="noreferrer">打开</a>`);
-  if (String(it.id||'').startsWith('manual-'))
-    bits.push(`<span class="del" data-del="${esc(it.id)}">删除</span>`);
+  // 按钮由服务端给的 editable / hideable 决定，前端不猜 id 前缀。
+  // 手动录入的条目能改能删；交我办的条目只能隐藏；Canvas 的截止什么都不给。
+  const rid = esc(it.id || '');
+  if (it.hidden) {
+    bits.push(`<span class="act" data-restore="${rid}">恢复</span>`);
+  } else if (it.editable) {
+    bits.push(`<span class="act" data-edit="${rid}">编辑</span>`);
+    bits.push(`<span class="del" data-del="${rid}">删除</span>`);
+  } else if (it.hideable) {
+    bits.push(`<span class="act" data-hide="${rid}">隐藏</span>`);
+  }
   bits.push(`<span style="opacity:.75">${esc(it.source||'')}</span>`);
   return `<div class="row ${it.overdue?'over':''}">
     <div class="head">
@@ -865,15 +882,52 @@ function renderList(){
   if (m) m.onclick = () => { state.expanded = !state.expanded; renderList(); };
 }
 
+/** 调写接口：统一处理错误提示，成功返回 JSON，失败返回 null。 */
+async function itemCall(method, path, body){
+  const opts = {method};
+  if (body) {
+    opts.headers = {'Content-Type':'application/json'};
+    opts.body = JSON.stringify(body);
+  }
+  const r = await api(path, opts);
+  let d;
+  try { d = await r.json(); } catch (err) { alert('服务返回的不是 JSON（HTTP ' + r.status + '）'); return null; }
+  if (!r.ok || !d.ok) { alert(d.error || ('操作失败（HTTP ' + r.status + '）')); return null; }
+  return d;
+}
+function findItem(id){
+  return (state.items || []).concat(state.hiddenItems || [])
+    .filter(x => String(x.id) === String(id))[0] || null;
+}
 listEl.addEventListener('click', async e => {
-  const a = e.target.closest('[data-del]');
-  if (!a) return;
-  e.preventDefault();
-  if (!confirm('删掉这条手动记录？')) return;
-  const r = await api('/api/manual/' + encodeURIComponent(a.dataset.del), {method:'DELETE'});
-  const d = await r.json();
-  if (!d.ok) alert(d.error || '删除失败');
-  loadList();
+  const edit = e.target.closest('[data-edit]');
+  const del = e.target.closest('[data-del]');
+  const hide = e.target.closest('[data-hide]');
+  const restore = e.target.closest('[data-restore]');
+  if (edit) {
+    e.preventDefault();
+    startEdit(findItem(edit.dataset.edit));
+    return;
+  }
+  if (del) {
+    e.preventDefault();
+    if (!confirm('删掉这条手动记录？删掉之后还能在「已删除」里恢复。')) return;
+    if (await itemCall('DELETE', '/api/item/' + encodeURIComponent(del.dataset.del))) loadList();
+    return;
+  }
+  if (hide) {
+    e.preventDefault();
+    if (!confirm('把这条从本机列表里隐藏？\n交我办里的课表不会变，随时可以恢复。')) return;
+    if (await itemCall('DELETE', '/api/item/' + encodeURIComponent(hide.dataset.hide))) loadList();
+    return;
+  }
+  if (restore) {
+    e.preventDefault();
+    if (await itemCall('POST', '/api/item/' + encodeURIComponent(restore.dataset.restore) + '/restore')) {
+      if (state.hiddenView) loadHidden(); else loadList();
+    }
+    return;
+  }
 });
 
 /* ============================================================ 取数 */
@@ -944,6 +998,14 @@ async function loadList(refresh){
     const n = noteFor(d, extra.join(' · '));
     noteEl.className = n.warn ? 'note warn' : 'note';
     noteEl.textContent = n.text;
+    state.hiddenView = false;
+    if (d.hidden_count) {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = `　已隐藏 ${d.hidden_count} 条（点开恢复）`;
+      a.onclick = ev => { ev.preventDefault(); loadHidden(); };
+      noteEl.appendChild(a);
+    }
 
     renderList();
   }catch(e){
@@ -990,9 +1052,70 @@ $('#startD').onchange = $('#endD').onchange = () => {
 $('#askBtn').onclick = () => loadList();
 $('#refreshBtn').onclick = () => loadList(true);
 
-/* ============================================================ 添加 */
+/* ============================================================ 添加 / 修改 */
+function kindHint(kind){
+  return kind === 'deadline'
+    ? '记作 <b>截止</b>：只有一个时间点，就是「什么时候之前要交完」。'
+    : '记作 <b>日程</b>：有起止时间，出席即可。结束时间可以留空。';
+}
+/** ISO 时间 → <input type=datetime-local> 认的 2026-11-07T14:00 */
+function toLocal(iso){ return iso ? String(iso).slice(0, 16) : ''; }
+
+function startEdit(it){
+  if (!it) return;
+  editingId = it.id;
+  manualKind = it.kind === 'deadline' ? 'deadline' : '日程';
+  [...$('#kindSeg').children].forEach(x =>
+    x.classList.toggle('on', x.dataset.kind === manualKind));
+  const isDl = manualKind === 'deadline';
+  $('#mEnd').hidden = isDl;
+  $('#mEnd').value = isDl ? '' : toLocal(it.end_at);
+  $('#mTitle').value = it.title || '';
+  $('#mWhen').value = toLocal(isDl ? it.due_at : it.start_at);
+  $('#mExtra').value = isDl ? (it.course || '') : (it.location || '');
+  $('#mExtra').placeholder = isDl ? '课程名（可选）' : '地点（可选）';
+  $('#mAdd').textContent = '保存修改';
+  $('#mCancel').hidden = false;
+  $('#mHint').innerHTML = '正在改一条<b>手动录入</b>的条目；改完只影响本机。';
+  $('#addForm').hidden = false;
+  $('#addToggle').textContent = '收起';
+  $('#mTitle').focus();
+}
+function exitEdit(){
+  editingId = null;
+  $('#mAdd').textContent = '添加';
+  $('#mCancel').hidden = true;
+  ['#mTitle','#mWhen','#mEnd','#mExtra'].forEach(x => { $(x).value = ''; });
+  $('#mHint').innerHTML = kindHint(manualKind);
+  $('#addForm').hidden = true;
+  $('#addToggle').textContent = '+ 添加';
+}
+$('#mCancel').onclick = () => exitEdit();
+
+/** 已隐藏的条目：能看、能恢复。数据来自 GET /api/items?hidden=1 */
+async function loadHidden(){
+  const r = await api('/api/items?hidden=1');
+  const d = await r.json();
+  if (!r.ok || !d.ok) { alert(d.error || '读取失败'); return; }
+  state.hiddenView = true;
+  state.hiddenItems = d.items || [];
+  noteEl.className = 'note';
+  noteEl.textContent = state.hiddenItems.length
+    ? `已隐藏 ${state.hiddenItems.length} 条（只影响本机显示，交我办里的课表没变）`
+    : '没有隐藏的条目';
+  const back = document.createElement('a');
+  back.href = '#';
+  back.textContent = '　← 返回列表';
+  back.onclick = ev => { ev.preventDefault(); state.hiddenView = false; loadList(); };
+  noteEl.appendChild(back);
+  listEl.innerHTML = state.hiddenItems.length
+    ? state.hiddenItems.map(row).join('')
+    : '<div class="empty"><b>没有隐藏的条目</b></div>';
+}
+
 $('#addToggle').onclick = () => {
   const f = $('#addForm');
+  if (!f.hidden && editingId) { exitEdit(); return; }
   f.hidden = !f.hidden;
   $('#addToggle').textContent = f.hidden ? '+ 添加' : '收起';
   if (!f.hidden) $('#mTitle').focus();
@@ -1006,18 +1129,16 @@ $('#kindSeg').addEventListener('click', e => {
   $('#mEnd').hidden = isDl;
   $('#mExtra').placeholder = isDl ? '课程名（可选）' : '地点（可选）';
   $('#mExtra').value = '';
-  $('#mHint').innerHTML = isDl
-    ? '记作 <b>截止</b>：只有一个时间点，就是「什么时候之前要交完」。'
-    : '记作 <b>日程</b>：有起止时间，出席即可。结束时间可以留空。';
+  $('#mHint').innerHTML = kindHint(manualKind);
 });
-$('#mHint').innerHTML = '记作 <b>截止</b>：只有一个时间点，就是「什么时候之前要交完」。';
+$('#mHint').innerHTML = kindHint('deadline');
 $('#mAdd').onclick = async () => {
   const title = $('#mTitle').value.trim();
   if (!title) { alert('先写个标题'); return; }
   const when = $('#mWhen').value;
   if (!when) { alert('选一个时间'); return; }
   const extra = $('#mExtra').value.trim();
-  const body = {kind: manualKind, title: title};
+  const body = {title: title};
   if (manualKind === 'deadline') {
     body.due = when;
     if (extra) body.course = extra;
@@ -1025,6 +1146,19 @@ $('#mAdd').onclick = async () => {
     body.start = when; body.end = $('#mEnd').value || null;
     if (extra) body.location = extra;
   }
+
+  if (editingId) {
+    // 改一条：只发白名单字段，kind 不传（服务端不允许换类型）
+    const up = await itemCall('PATCH', '/api/item/' + encodeURIComponent(editingId), body);
+    if (!up) return;
+    const name = up.item && up.item.title || title;
+    exitEdit();
+    await loadList();
+    noteEl.textContent = `✅ 已修改：${name}　${noteEl.textContent}`;
+    return;
+  }
+
+  body.kind = manualKind;
   const r = await api('/api/manual', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const d = await r.json();

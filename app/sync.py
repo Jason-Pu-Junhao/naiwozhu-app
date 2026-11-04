@@ -75,6 +75,9 @@ def build_bundle(store):
     manual = [model.strip_derived(i) for i in store.manual_items(include_deleted=True)]
     manual.sort(key=lambda r: str(r.get("id")))
 
+    # 交我办条目的隐藏记录。可选段：老版本收到会忽略这个键，版本号不用动。
+    hides = store.hide_items(include_deleted=True)
+
     return {
         "schema": SCHEMA,
         "device_id": store.device_id(),
@@ -82,6 +85,7 @@ def build_bundle(store):
         "calendar": cal_out,
         "canvas": cv_out,
         "manual": manual,
+        "hides": hides,
     }
 
 
@@ -94,6 +98,8 @@ def validate(bundle):
                         f"本机支持的是 {SCHEMA}。两边的程序版本可能不一样。")
     if not isinstance(bundle.get("manual") or [], list):
         raise SyncError("同步包的 manual 字段不是列表")
+    if not isinstance(bundle.get("hides") or [], list):
+        raise SyncError("同步包的 hides 字段不是列表")
     for key in ("calendar", "canvas"):
         v = bundle.get(key)
         if v is not None and not isinstance(v, dict):
@@ -108,6 +114,7 @@ def bundle_summary(bundle):
         "calendar": len((bundle.get("calendar") or {}).get("items") or []),
         "canvas": len((bundle.get("canvas") or {}).get("items") or []),
         "manual": len(bundle.get("manual") or []),
+        "hides": len(bundle.get("hides") or []),
     }
 
 
@@ -149,6 +156,7 @@ def merge(local, remote):
         "calendar": "kept",
         "canvas": "kept",
         "manual": {"added": 0, "updated": 0, "deleted": 0},
+        "hides": {"added": 0, "updated": 0},
     }
 
     cal = local.get("calendar")
@@ -184,6 +192,22 @@ def merge(local, remote):
             elif rec != cur:
                 changes["manual"]["updated"] += 1
 
+    hmap = {str(r.get("id")): r for r in (local.get("hides") or [])
+            if isinstance(r, dict) and r.get("id") is not None}
+    rhmap = {str(r.get("id")): r for r in (remote.get("hides") or [])
+             if isinstance(r, dict) and r.get("id") is not None}
+
+    hmerged = dict(hmap)
+    for rid, rec in rhmap.items():
+        cur = hmap.get(rid)
+        if cur is None:
+            hmerged[rid] = rec
+            changes["hides"]["added"] += 1
+            continue
+        if _manual_key(rec) > _manual_key(cur):
+            hmerged[rid] = rec
+            changes["hides"]["updated"] += 1
+
     return {
         "schema": SCHEMA,
         "device_id": local.get("device_id"),
@@ -191,6 +215,7 @@ def merge(local, remote):
         "calendar": cal,
         "canvas": cv,
         "manual": sorted(merged.values(), key=lambda r: str(r.get("id"))),
+        "hides": sorted(hmerged.values(), key=lambda r: str(r.get("id"))),
     }, changes
 
 
@@ -202,7 +227,7 @@ def apply_bundle(store, bundle):
     本机可能刚好导入了更新的课表，不能拿旧包把它盖掉。
     """
     bundle = validate(bundle)
-    wrote = {"calendar": False, "canvas": False, "manual": 0}
+    wrote = {"calendar": False, "canvas": False, "manual": 0, "hides": 0}
 
     cal = bundle.get("calendar")
     if cal:
@@ -225,6 +250,7 @@ def apply_bundle(store, bundle):
             wrote["canvas"] = True
 
     wrote["manual"] = store.upsert_manual_records(bundle.get("manual") or [])
+    wrote["hides"] = store.upsert_hides(bundle.get("hides") or [])
     return wrote
 
 
