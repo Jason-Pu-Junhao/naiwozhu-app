@@ -26,6 +26,9 @@ echo
 echo "=========== 交我办导入 + 两种日期类型 ==========="
 "$PY" app/test/test_store.py
 echo
+echo "=========== 到点提醒：窗口 / 去重 / 衔接 ==========="
+"$PY" app/test/test_remind.py
+echo
 echo "=========== 网页服务：接口 / 演示模式 / 缓存 ==========="
 "$PY" app/test/test_server.py
 echo

@@ -7,6 +7,8 @@
     .venv/bin/python app/cli.py --days 7             # 只看 7 天内
     .venv/bin/python app/cli.py --all                # 连没写截止时间的也显示
     .venv/bin/python app/cli.py --save-token         # 保存令牌到本地配置
+    .venv/bin/python app/cli.py --remind             # 到点提醒：现在该念什么
+    .venv/bin/python app/cli.py --remind --at "2026-11-06 08:00"   # 假装现在是几点
 """
 import argparse
 import os
@@ -89,6 +91,56 @@ def whoami(client):
     print(f"令牌有效：{me.get('name')}（学号 {sid}）")
 
 
+def remind_cmd(args):
+    """--remind：现在该念什么。
+
+    和日历那几条命令一样不碰 Canvas：只用本机已存的数据，
+    所以断网也能用，也不问令牌。
+    判定规则全在 remind.py 里，这一层只负责打印。
+    """
+    import model
+    import remind
+    from store import Store
+
+    now = None
+    if args.at:
+        now = model.parse_dt(args.at)
+        if now is None:
+            print(f"时间看不懂：{args.at}（要像 \"2026-11-06 08:00\"）", file=sys.stderr)
+            return 2
+
+    st = Store()
+    res = remind.collect(st.effective_items(), now=now,
+                         preview=bool(args.preview), limit=args.limit)
+    cfg = res["settings"]
+    stamp = res["now"][:16].replace("T", " ")
+
+    if not res["stages"]:
+        print(f"{C_DIM}{stamp} · 现在没到提醒时间{C_END}")
+        print(f"{C_DIM}提醒位：早 {cfg['morning']} / 晚 {cfg['evening']} "
+              f"/ 日程开始前 {cfg['before_min']} 分钟{C_END}")
+        print(f"{C_DIM}要随时看全部，用 app/cli.py 或网页的查询{C_END}")
+        return 0
+
+    title = "到点提醒（预览）" if res["preview"] else "到点提醒"
+    print(f"\n{C_YEL}{title} · {stamp}{C_END}")
+    for stage in res["stages"]:
+        print(f"\n  {C_GRN}【{stage['label']}】{C_END}"
+              f"{C_DIM} {stage['stage']}{C_END}")
+        if not stage["items"]:
+            print(f"  {C_DIM}（没有内容）{C_END}")
+            continue
+        for it in stage["items"]:
+            head = f"还有 {it['minutes_left']} 分钟" if it["stage"] == "soon" \
+                else it["when_local"]
+            print(f"  · {head}  {it['title']}  {C_DIM}{it['reason']}{C_END}")
+        if stage["truncated"]:
+            print(f"  {C_DIM}（还有 {stage['dropped']} 条没列出）{C_END}")
+    print(f"\n{C_DIM}共 {res['count']} 条；终端按 remind_id 去重，"
+          f"同一件事只念一次{C_END}")
+    return 0
+
+
 def calendar_cmds(args):
     """导入/查看交我办日程。这一步不需要 Canvas 令牌。"""
     import json
@@ -152,9 +204,20 @@ def main():
     ap.add_argument("--scan-inbox", action="store_true",
                     help="从收件箱目录导入最新的一份")
     ap.add_argument("--show-calendar", action="store_true", help="列出已导入的日程")
+    ap.add_argument("--remind", action="store_true",
+                    help="到点提醒：现在该念什么（不联网、不要令牌）")
+    ap.add_argument("--preview", action="store_true",
+                    help="配合 --remind：不管现在几点，三个提醒位都算一遍")
+    ap.add_argument("--at", metavar="TIME",
+                    help="配合 --remind：假装现在是这个时刻，如 \"2026-11-06 08:00\"")
+    ap.add_argument("--limit", type=int, default=8,
+                    help="配合 --remind：每个提醒位最多几条（默认 8）")
     args = ap.parse_args()
 
-    # 日历这几条命令不碰 Canvas，所以放在要令牌之前
+    # 提醒和日历这几条命令不碰 Canvas，所以放在要令牌之前
+    if args.remind:
+        return remind_cmd(args)
+
     if (args.import_calendar or args.inspect_calendar
             or args.scan_inbox or args.show_calendar):
         return calendar_cmds(args)

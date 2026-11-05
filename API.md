@@ -251,6 +251,58 @@ GET /api/items?hidden=1    → 反过来：只给被隐藏的那几条（恢复�
 
 顶层还有 `count` 与 `hidden_count`。`/api/query` 返回的条目也带 `editable` / `hideable`。
 
+### 2.6 `GET /api/remind` —— 到点提醒（终端主动开口用）
+
+问一句「**现在该念什么**」。判定全在服务端（只有这边知道条目、隐藏、已交状态与时间窗），
+念的时机在终端（只有那边有喇叭、知道现在闲不闲）。**这个接口不发任何网络请求**：
+只用本机已存的数据（Canvas 用上次抓取的缓存），断网也答得出来。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `stage` | 空 | `morning` / `evening` / `soon`，只看一个位；填错 400 |
+| `preview` | `0` | `1` 时三个位都算一遍，不管现在几点（调试、演示用） |
+| `limit` | `8` | 每个位最多几条；多的标 `truncated` 并给 `dropped` |
+
+```json
+{
+  "ok": true,
+  "now": "2026-11-06T08:00:00+08:00",
+  "stages": [{
+    "stage": "morning", "label": "今天的安排", "due": true,
+    "remind_id": "morning:2026-11-06",
+    "count": 1, "truncated": false, "dropped": 0,
+    "items": [{
+      "remind_id": "morning:2026-11-06:canvas-1",
+      "id": "canvas-1", "stage": "morning", "reason": "今日截止",
+      "kind": "deadline", "title": "第五章作业",
+      "when_local": "11-06 23:00", "at": "2026-11-06T23:00:00+08:00",
+      "all_day": false, "course": "", "source": "canvas", "location": ""
+    }]
+  }],
+  "due_count": 1,
+  "count": 1,
+  "settings": {"morning": "08:00", "evening": "22:00", "before_min": 60, "hold_min": 240},
+  "preview": false,
+  "demo": false
+}
+```
+
+三个提醒位：
+
+| 位 | 窗口 | 内容 |
+|---|---|---|
+| `morning` | 08:00–12:00 | 今日日程 + 今日截止 + 已过期未交（最多 5 条，排最前） |
+| `evening` | 22:00–次日 02:00 | 明日日程 + 明日截止 |
+| `soon` | 日程开始前 60 分钟内 | 逐条，`minutes_left` 给还剩几分钟 |
+
+- `stages` **为空 = 现在没到点**，终端应该什么都不说，不是「出错了」。
+- `remind_id` 是去重键（整段一个、每条一个），终端按它记「念过了」。
+- 一小时内就要开始的日程**不进总览**，只在 `soon` 里出现一次，避免同一件事说两遍。
+- 时刻可改：`config.local.json` 的 `remind_morning` / `remind_evening` /
+  `remind_before_min` / `remind_hold_min`，或环境变量 `NAIWOZHU_REMIND_*`；
+  `/api/status` 的 `remind` 字段回显当前生效值。
+- 终端怎么接（轮询、去重、模板、别做的事）见 `docs/交接_自动提醒.md`。
+
 ---
 
 ## 3. 条目长什么样
@@ -319,6 +371,11 @@ GET /api/items?hidden=1    → 反过来：只给被隐藏的那几条（恢复�
 .venv/bin/python app/cli.py --inspect-calendar FILE   # 只看文件里有什么，不写
 .venv/bin/python app/cli.py --scan-inbox              # 从收件箱导入最新一份
 .venv/bin/python app/cli.py --show-calendar           # 列出已导入的日程
+
+# 到点提醒（同样不需要令牌，也不联网）
+.venv/bin/python app/cli.py --remind                  # 现在该念什么
+.venv/bin/python app/cli.py --remind --preview        # 三个位都算一遍
+.venv/bin/python app/cli.py --remind --at "2026-11-06 08:00"   # 假装现在是几点
 ```
 
 命令行这条路**只查 Canvas 的作业**，不合并本机日程与手动条目——

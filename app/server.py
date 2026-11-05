@@ -38,6 +38,7 @@ from canvas_client import CanvasClient, CanvasError
 from ddl_service import DDLService
 from store import ItemError, Store
 import query as q
+import remind as remind_mod
 import sync as sync_mod
 
 import console        # noqa: E402
@@ -416,6 +417,8 @@ def api_status():
                  "loopback_only": _host_is_loopback()},
         "access": {"has_key": key_set,
                    "client_loopback": _is_loopback_client()},
+        # 到点提醒（判定在服务端，念的时机在终端；见 docs/交接_自动提醒.md）
+        "remind": remind_mod.settings(cfg),
         # 两台机器同步
         "sync": {
             "peer": cfg.get("sync_peer") or "",
@@ -916,6 +919,47 @@ def api_query():
     if demo_on:
         out["demo_banner"] = demo.BANNER
     return jsonify(out)
+
+
+# ---------------------------------------------------------------- 到点提醒
+@app.get("/api/remind")
+def api_remind():
+    """现在该念什么。判定全在这边，终端只管什么时候来问。
+
+    语音终端每隔几分钟空闲时打一次，拿到 stages 就挨个念；
+    返回空列表说明「现在没到点」，不用接话。
+
+    参数：
+      stage=morning|evening|soon  只看某一个位（调试用）
+      preview=1                   三个位都算一遍，不管现在几点（调试/演示用）
+      limit=8                     每个位最多几条（超过的标 truncated）
+
+    这个接口**不发网络请求**：只用本机已存的数据（Canvas 用上次抓取的缓存），
+    断网也答得出来——早上八点还没连上网的时候正是要用它的时候。
+    """
+    cfg = config.load()
+    stage = (request.args.get("stage") or "").strip() or None
+    if stage and stage not in remind_mod.STAGES:
+        return _item_error(f"不认识的提醒位：{stage}（可选 {'/'.join(remind_mod.STAGES)}）")
+    preview = str(request.args.get("preview") or "").lower() in ("1", "true", "yes")
+    try:
+        limit = int(request.args.get("limit") or 8)
+    except (TypeError, ValueError):
+        return _item_error("limit 要是一个整数")
+    limit = max(1, min(limit, 20))
+
+    # 已剔掉被隐藏的条目：隐藏了就不该再被念出来
+    pool = list(store.effective_items())
+    if store.demo_on():
+        pool += demo.items()
+
+    res = remind_mod.collect(pool, cfg=cfg, preview=preview, limit=limit)
+    if stage:
+        res["stages"] = [s for s in res["stages"] if s["stage"] == stage]
+        res["due_count"] = len([s for s in res["stages"] if s["items"]])
+        res["count"] = sum(s["count"] for s in res["stages"])
+    res["demo"] = store.demo_on()
+    return jsonify({"ok": True, **res})
 
 
 # ---------------------------------------------------------------- 后台同步

@@ -28,6 +28,22 @@ ENV_ACCESS_KEY = "NAIWOZHU_ACCESS_KEY"
 ENV_PEER = "NAIWOZHU_SYNC_PEER"
 ENV_INTERVAL = "NAIWOZHU_SYNC_INTERVAL"
 
+# 到点提醒的时刻（remind.py）。终端只读 /api/remind，不读这几个变量。
+ENV_REMIND_MORNING = "NAIWOZHU_REMIND_MORNING"
+ENV_REMIND_EVENING = "NAIWOZHU_REMIND_EVENING"
+ENV_REMIND_BEFORE = "NAIWOZHU_REMIND_BEFORE_MIN"
+ENV_REMIND_HOLD = "NAIWOZHU_REMIND_HOLD_MIN"
+
+# 提醒的默认值。'10 点' 按晚上 22:00 做：早上十点提醒明天的日程偏早，
+# 晚上十点才是真的会去想「明天要不要早起」。要上午十点就改这一行
+# （或者设 NAIWOZHU_REMIND_EVENING=10:00）。
+DEFAULT_REMIND = {
+    "morning": "08:00",
+    "evening": "22:00",
+    "before_min": 60,
+    "hold_min": 240,
+}
+
 
 def _read_file():
     if not os.path.exists(LOCAL_CFG):
@@ -50,6 +66,13 @@ def _write_file(data):
     except OSError:
         pass                                     # Windows 上 chmod 意义不大
     return LOCAL_CFG
+
+
+def _int_or(val, default):
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 def load():
@@ -89,6 +112,22 @@ def load():
             cfg["sync_interval"] = int(os.environ[ENV_INTERVAL])
         except ValueError:
             pass
+
+    # ---- 到点提醒：环境变量 > config.local.json > 默认值
+    remind = dict(DEFAULT_REMIND)
+    for key, env, file_key in (
+            ("morning", ENV_REMIND_MORNING, "remind_morning"),
+            ("evening", ENV_REMIND_EVENING, "remind_evening")):
+        val = (os.environ.get(env) or str(data.get(file_key) or "")).strip()
+        if val:
+            remind[key] = val
+    for key, env, file_key in (
+            ("before_min", ENV_REMIND_BEFORE, "remind_before_min"),
+            ("hold_min", ENV_REMIND_HOLD, "remind_hold_min")):
+        val = os.environ.get(env) or data.get(file_key)
+        if val not in (None, ""):
+            remind[key] = _int_or(val, DEFAULT_REMIND[key])
+    cfg["remind"] = remind
 
     return cfg
 

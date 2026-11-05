@@ -824,6 +824,108 @@ def main():
         check("状态里有 hidden_count", "hidden_count" in st, sorted(st)[:8])
         check("状态里有 orphan_hides", st.get("orphan_hides") == [], st.get("orphan_hides"))
 
+        print("\n到点提醒")
+        check("状态里有 remind 设置",
+              (st.get("remind") or {}).get("morning") == "08:00", st.get("remind"))
+
+        now = datetime.now(CST)
+
+        def add_soon(title, minutes):
+            """加一条 N 分钟后开始的日程，返回 id。"""
+            start = now + timedelta(minutes=minutes)
+            body = {"kind": model.KIND_SCHEDULE, "title": title,
+                    "start": start.strftime("%Y-%m-%dT%H:%M"),
+                    "end": (start + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M")}
+            return c.post("/api/manual", json=body).get_json()["item"]["id"]
+
+        soon_id = add_soon("马上开始的会", 30)
+        later_id = add_soon("四十五分钟后的会", 45)
+
+        calls_before = FakeDDLService.calls
+        r = c.get("/api/remind")
+        code, d = r.status_code, r.get_json()
+        check("/api/remind 返回 200", code == 200, code)
+        for k in ("ok", "now", "stages", "due_count", "count", "settings",
+                  "preview", "demo"):
+            check(f"remind 里有 {k}", k in d, sorted(d))
+        check("★提醒一次都不碰 Canvas（不联网）",
+              FakeDDLService.calls == calls_before, FakeDDLService.calls)
+        check("settings 是归一好的设置",
+              d["settings"]["morning"] == "08:00"
+              and d["settings"]["before_min"] == 60, d["settings"])
+        all_ids = [i["id"] for s in d["stages"] for i in s["items"]]
+        check("★半小时后开始的会出现在提醒里", soon_id in all_ids, all_ids)
+        check("四十五分钟后的也在", later_id in all_ids, all_ids)
+        soon_entry = [i for s in d["stages"] for i in s["items"]
+                      if i["id"] == soon_id][0]
+        check("★原因写的是「一小时内开始」", soon_entry["reason"] == "一小时内开始",
+              soon_entry["reason"])
+        check("带 remind_id（终端靠它去重）", bool(soon_entry["remind_id"]),
+              soon_entry)
+        check("带 when_local 与 minutes_left",
+              bool(soon_entry["when_local"]) and 0 <= soon_entry["minutes_left"] <= 60,
+              soon_entry)
+        check("due_count 与段数一致", d["due_count"] == len(d["stages"]), d["due_count"])
+
+        r = c.get("/api/remind?stage=soon").get_json()
+        check("stage=soon 只给 soon", [s["stage"] for s in r["stages"]] == ["soon"],
+              [s["stage"] for s in r["stages"]])
+        code = c.get("/api/remind?stage=nope").status_code
+        check("不认识的提醒位 → 400", code == 400, code)
+        code = c.get("/api/remind?limit=abc").status_code
+        check("limit 不是数字 → 400", code == 400, code)
+
+        r = c.get("/api/remind?stage=soon&limit=1").get_json()
+        st1 = r["stages"][0]
+        check("limit=1 只留一条", st1["count"] == 1, st1["count"])
+        check("★多的标出来，终端好说「还有几条」",
+              st1["truncated"] is True and st1["dropped"] >= 1,
+              (st1["truncated"], st1["dropped"]))
+
+        print("\n到点提醒：预览 / 隐藏 / 演示")
+        f = lambda dd: dd.strftime("%Y-%m-%d %H:%M")            # noqa: E731
+        # 明天的 09:00 整。别用 now+1天9小时——下午跑的时候会变成后天。
+        tomorrow9 = (now + timedelta(days=1)).replace(hour=9, minute=0,
+                                                      second=0, microsecond=0)
+        # exported_at 要比前面那份（2030）新，否则会被当成旧数据整份跳过
+        payload = {"exported_at": "2031-01-01T00:00:00+08:00",
+                   "calendars": {"my": [{"id": 11, "name": "我的日程"}]},
+                   "events": [{"eventId": 7100, "calendarId": 11,
+                               "title": "明天的大会",
+                               "startTime": f(tomorrow9),
+                               "endTime": f(tomorrow9 + timedelta(hours=1))}]}
+        r = c.post("/api/import", json={"payload": payload,
+                                        "filename": "remind.json"}).get_json()
+        check("导入明天的一条日程", r["ok"], r)
+
+        d = c.get("/api/remind?preview=1").get_json()
+        check("preview 标记为真", d["preview"] is True)
+        evening = [s for s in d["stages"] if s["stage"] == "evening"]
+        check("预览里有晚间这一位", len(evening) == 1,
+              [s["stage"] for s in d["stages"]])
+        ev_ids = [i["id"] for i in evening[0]["items"]] if evening else []
+        check("★明天的日程出现在晚间总览里", "cal-7100" in ev_ids, ev_ids)
+        ev = [i for i in evening[0]["items"] if i["id"] == "cal-7100"] if evening else []
+        check("原因是「明日日程」", ev and ev[0]["reason"] == "明日日程", ev)
+
+        r = c.delete("/api/item/cal-7100")
+        check("能隐藏它", r.status_code == 200, r.get_json())
+        d = c.get("/api/remind?preview=1").get_json()
+        check("★隐藏之后不再被念出来",
+              "cal-7100" not in [i["id"] for s in d["stages"] for i in s["items"]])
+        c.post("/api/item/cal-7100/restore")
+        d = c.get("/api/remind?preview=1").get_json()
+        check("恢复之后又回来了",
+              "cal-7100" in [i["id"] for s in d["stages"] for i in s["items"]])
+
+        c.post("/api/demo", json={"on": True})
+        d = c.get("/api/remind?preview=1").get_json()
+        check("★演示模式下也有提醒可念（离线演示要用）", d["count"] > 0, d["count"])
+        check("演示模式标记", d["demo"] is True)
+        c.post("/api/demo", json={"on": False})
+        d = c.get("/api/remind").get_json()
+        check("关掉演示模式后不再带演示数据", d["demo"] is False)
+
     finally:
         shutil.rmtree(_TMP, ignore_errors=True)
 
