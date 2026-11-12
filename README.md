@@ -3,21 +3,25 @@
 对着桌上的奶龙玩偶问一句「我还有哪些作业没交」「我明天有什么日程」，
 它从 **Canvas**（`oc.sjtu.edu.cn`）和**交我办日历**里查出答案。
 
-这个仓库只放**软件**：
+这个仓库放**软件（两端都在这里）**：
 
 | 目录 | 是什么 |
 |---|---|
-| `app/` | 本地网页版：Canvas 取数、交我办日历导入、查询、手动录入、条目改删隐藏、演示模式 |
+| `app/` | 电脑端：本地网页版 + 全部接口。Canvas 取数、交我办日历导入、查询、手动录入、条目改删隐藏、到点提醒、演示模式 |
+| `terminal/` | 语音终端：唤醒、识别、大模型抽参数、播报。听与说在这里，数据与判断在 `app/` |
 | `tools/browser/` | 交我办同步脚本（一份代码，三种装法）+ 自带的 Chrome 扩展 |
 | `tools/verify_windows.py` `.ps1` | Windows 兼容性体检 |
 | `tools/canvas_check.py` | Canvas 令牌自检 |
 | `tools/sync_smoke.py` | 两台机器同步的验收脚本 |
+| `tools/smoke_link.py` | 终端 ↔ 电脑端的链路冒烟（不用麦克风与密钥） |
 | `SYNC.md` | 两台机器（电脑 + 树莓派）怎么配、怎么同步 |
-| `API.md` | 接口清单：写日程、查日程与 ddl、条目结构 |
+| `API.md` | 接口清单：写日程、查日程与 ddl、条目改删隐藏、到点提醒、条目结构 |
+| `terminal/INTEGRATION.md` | 终端与电脑端的对接契约（终端同学写的，以 `API.md` 为准） |
 
 课程文档（项目建议书、答辩 PPT、小组分工、学习路线）不在这里。
 
-> **目录结构别动**：`app/` 和 `tools/` 必须留在仓库根目录。
+> **目录结构别动**：`app/`、`tools/`、`terminal/` 都留在仓库根目录
+> （`tools/smoke_link.py` 按 `../terminal` 找终端代码）。
 > `app/server.py` 会去找 `../tools/browser`，把 `app/` 单独拎出去会让配置页上
 > 「安装自动同步脚本」那个按钮 404。同理，`tools/verify_windows.ps1` 也假设
 > 自己待在 `<仓库根>/tools/` 下。
@@ -58,7 +62,7 @@ Windows 上有两处要注意（体检脚本会逐条量出来）：
 python3 -m venv .venv
 .venv/bin/pip install -r app/requirements.txt
 
-bash app/run_tests.sh     # 五套测试，共 402 项
+bash app/run_tests.sh     # 六套测试，共 567 项
 bash app/run.sh           # 起网页版，默认 http://127.0.0.1:5173
 ```
 
@@ -98,6 +102,48 @@ export CANVAS_TOKEN='你的令牌'                # 或者临时用环境变量
 ```bash
 .venv/bin/python tools/sync_smoke.py      # 本机模拟两台
 ```
+
+---
+
+## 语音终端（`terminal/`）
+
+终端只负责听与说：Vosk 离线唤醒 → 云端识别 → 大模型把同音错字纠回来、只输出查询参数
+→ 请求电脑端接口 → 按模板拼语音播报。数据、判断、写库都在 `app/` 里，终端不碰任何凭据。
+
+`terminal/` 是从组内仓库 [`walkerljy/naiwozhu-terminal`](https://github.com/walkerljy/naiwozhu-terminal)
+同步过来的，来源与同步方式见 [`terminal/来源与上游同步.md`](terminal/来源与上游同步.md)。
+
+```bash
+cd terminal
+python -m pip install -r requirements.txt      # 树莓派还要 apt install libportaudio2 ffmpeg
+cp local_secrets.example.py local_secrets.py   # 填 LLM_API_KEY 与云端识别 Key
+python download_model.py                       # Vosk 中文小模型，约 40 MB
+python assistant.py --check                    # 自检麦克风与唤醒词
+```
+
+### 两端怎么接（同一台机器 / 树莓派连电脑）
+
+```bash
+# 电脑端：对外提供数据要先设口令，没口令时拒绝启动
+bash app/run.sh --host 0.0.0.0 --access-key 那串口令
+
+# 终端：填电脑的地址和同一个口令（本机 127.0.0.1 不需要口令）
+cd terminal
+BACKEND_URL=http://192.168.1.23:5173 BACKEND_TOKEN=那串口令 python assistant.py
+```
+
+先确认链路通了再调麦克风：
+
+```bash
+.venv/bin/python tools/smoke_link.py                              # 连本机 127.0.0.1:5173
+BACKEND_URL=http://192.168.1.23:5173 NAIWOZHU_ACCESS_KEY=口令 \
+    .venv/bin/python tools/smoke_link.py                          # 连电脑端
+.venv/bin/python tools/smoke_link.py --read-only                  # 只读，不动数据
+```
+
+它验的是契约：`/api/status`、`/api/query`、`/api/items`、`/api/remind`、写操作往返
+（加 → 改 → 删 → 恢复）、`cal-*` 只能隐藏、口令错误与连不上时的行为。
+**不验**麦克风、唤醒、云端识别、大模型——那几段要硬件和密钥，见 `terminal/README.md`。
 
 ---
 
