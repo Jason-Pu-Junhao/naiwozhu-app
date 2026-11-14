@@ -230,20 +230,20 @@ def decorate(item):
 
 
 def rec_key(rec):
-    """同步裁决用的全序键：(更新时间, 修订号, 设备号)。
+    """同步裁决用的全序键：(修订号, 更新时间, 设备号)。
 
-    时间戳只当第一顺位：两台机器的时钟一旦不一致，光看时间会静默丢数据。
-    rev 在同一台设备内单调递增，device_id 让"完全相同"也有确定答案，
-    所以合并结果不依赖两边谁先算——这是"一次往返就收敛"的前提。
+    rev 在同一记录上随改、删、恢复单调递增，必须最先比较：否则对端时钟稍慢时，
+    刚执行的恢复会被本端时间戳更晚的旧墓碑覆盖。rev 相同才代表并发分支，
+    此时用时间戳裁决，device_id 让"完全相同"也有确定答案，保证合并收敛。
     """
     if not isinstance(rec, dict):
-        return (datetime.min.replace(tzinfo=timezone.utc), 0, "")
+        return (0, datetime.min.replace(tzinfo=timezone.utc), "")
     t = parse_dt(rec.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc)
     try:
         rev = int(rec.get("rev") or 0)
     except (TypeError, ValueError):
         rev = 0
-    return (t, rev, str(rec.get("device_id") or ""))
+    return (rev, t, str(rec.get("device_id") or ""))
 
 
 # ---------------------------------------------------------------- 排序
