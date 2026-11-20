@@ -692,8 +692,11 @@ def check():
         print("唤醒成功 ✅")
 
     print("\n=== 喇叭 ===")
-    play(beep())
-    print("听到「叮」了吗？没听到就配 OUT_DEVICE")
+    if config.BEEP:
+        play(beep())
+        print("听到「叮」了吗？没听到就配 OUT_DEVICE")
+    else:
+        print("BEEP=0，已跳过提示音；说话声请用 --say 测")
 
 
 def main():
