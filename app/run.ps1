@@ -3,7 +3,7 @@
 #   .\app\run.ps1                 起网页版（默认 5173 端口，只监听本机）
 #   .\app\run.ps1 -Port 5199      换端口
 #   .\app\run.ps1 -NoBrowser      不自动开浏览器
-#   .\app\run.ps1 -Tests          跑五套测试（391 项）
+#   .\app\run.ps1 -Tests          跑全部测试
 #
 #   # 让手机 / 树莓派访问（先设好访问口令，否则服务拒绝启动）
 #   .\app\run.ps1 -BindHost 0.0.0.0 -AccessKey '你的口令'
@@ -47,7 +47,7 @@ if (-not (Test-Path -LiteralPath $py)) {
 if ($Tests) {
     # 编码不用管：app/console.py 在输出被重定向时会自己切到 UTF-8
     $suites = @('test_query.py', 'test_ddl.py', 'test_store.py',
-                'test_server.py', 'test_sync.py')
+                'test_remind.py', 'test_server.py', 'test_sync.py', 'test_submission.py')
     $bad = 0
     foreach ($s in $suites) {
         Write-Host "=========== $s ==========="
@@ -59,7 +59,7 @@ if ($Tests) {
         Write-Host "有 $bad 套没通过。" -ForegroundColor Yellow
         exit 1
     }
-    Write-Host "五套测试全部通过。" -ForegroundColor Green
+    Write-Host "全部测试通过。" -ForegroundColor Green
     exit 0
 }
 

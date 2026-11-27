@@ -921,6 +921,37 @@ def api_query():
     return jsonify(out)
 
 
+# ---------------------------------------------------------------- Canvas 作业提交状态
+@app.post("/api/canvas/assignment-status")
+def api_canvas_assignment_status():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(ok=False, error="请提供课程名和作业名。"), 400
+    course, title = body.get("course_kw"), body.get("title_kw")
+    if not all(isinstance(value, str) and value.strip() for value in (course, title)):
+        return jsonify(ok=False, error="请提供课程名和作业名。"), 400
+
+    cfg = config.load()
+    if store.demo_on() or not cfg["token"]:
+        return jsonify(ok=True, status="unknown")
+
+    try:
+        client = CanvasClient(cfg["base"], cfg["token"])
+        try:
+            matches = DDLService(client).assignment_matches(course.strip(), title.strip())
+        finally:
+            client.s.close()
+    except (CanvasError, KeyError, TypeError, ValueError):
+        return jsonify(ok=True, status="unknown")
+
+    if not matches:
+        return jsonify(ok=True, status="not_found")
+    if len(matches) == 1:
+        match = matches[0]
+        return jsonify(ok=True, status=match["status"], assignment=match)
+    return jsonify(ok=True, status="ambiguous", candidates=matches)
+
+
 # ---------------------------------------------------------------- 到点提醒
 @app.get("/api/remind")
 def api_remind():
