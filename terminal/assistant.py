@@ -39,6 +39,7 @@ if "--system-tts" in _args:
 import backend                                                    # noqa: E402
 from audio import beep, play                                      # noqa: E402  （要在改完 config 之后导入）
 from llm import ConfigError, LLMError, parse                          # noqa: E402
+import servo                                                      # noqa: E402
 import stt                                                        # noqa: E402
 import tts                                                        # noqa: E402
 from tts import TEMPLATES, cn_int, cn_text, human_time, render, speak  # noqa: E402
@@ -591,7 +592,12 @@ def _reminder_loop():
 
 
 def ack():
-    """唤醒应答：有角色原声（resources/voice/_ack.wav）就放原声，否则拼模板。"""
+    """唤醒应答：有角色原声（resources/voice/_ack.wav）就放原声，否则拼模板。
+
+    同时让舵机摆一下（前后各 30°，60°/s）作为物理反馈。
+    舵机在独立线程里跑，不阻塞这里的声音播放和后面的录音。
+    """
+    servo.nod()
     if tts.has_ack_clip():
         print("[奶龙] （角色原声）")
         tts.play_ack()

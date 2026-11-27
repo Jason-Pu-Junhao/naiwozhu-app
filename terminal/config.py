@@ -66,6 +66,25 @@ BEEP_VOLUME = float(_env("BEEP_VOLUME", "0.08"))
 BEEP = _on("BEEP", "1")
 DEBUG = _on("DEBUG")
 
+# ---------------- 舵机（唤醒时动一下作为物理反馈） ----------------
+# 两种舵机都支持，用 SERVO_MODE 选：
+#   position    位置舵机（SG90 / MG90S 180° 版）：按角度走，0° → +30° → -30° → 0°
+#   continuous  连续旋转舵机（MG90S 360° 版）：没有角度概念，只能「转一下停」
+#
+# 实测手上那颗 MG90S 是 360° 版：1500us 停、1000us 一直正转、2000us 一直反转，
+# 做不了「±30° 摆动」，只能改用 continuous 模式（转一下停）。
+# 现在换回位置舵机，默认 position。
+# 没有舵机时设 SERVO=0，程序照常运行。
+SERVO = _on("SERVO", "1")
+SERVO_PIN = int(_env("SERVO_PIN", "18"))          # GPIO18 = 物理第 12 脚
+SERVO_MODE = _env("SERVO_MODE", "position").lower()   # position / continuous
+# 位置舵机用：单侧幅度与角速度
+SERVO_SWING_DEG = float(_env("SERVO_SWING_DEG", "30"))      # ±30°
+SERVO_DEG_PER_SEC = float(_env("SERVO_DEG_PER_SEC", "60"))  # 60°/s
+# 连续旋转舵机用：转多久、偏多少
+SERVO_SPIN_SEC = float(_env("SERVO_SPIN_SEC", "0.15"))      # 每次转 0.15 秒
+SERVO_SPIN_US = float(_env("SERVO_SPIN_US", "300"))         # 偏离中位的脉宽（越大越快）
+
 # ---------------- 本地语音识别 (Vosk) ----------------
 VOSK_MODEL = _env("VOSK_MODEL", str(ROOT / "models" / "vosk-model-small-cn-0.22"))
 # 唤醒词，可以有多个（逗号/空格/竖线分隔），命中任意一个就算唤醒。
